@@ -50,6 +50,18 @@ pub struct ListAssetsQuery {
     pub search: Option<String>,
 }
 
+#[derive(Deserialize)]
+pub struct AssetDetailQuery {
+    pub as_of: Option<String>,
+    pub include_pending: Option<bool>,
+}
+
+#[derive(Deserialize)]
+pub struct EditFieldsRequest {
+    pub fields: HashMap<String, String>,
+    pub effective_date: Option<String>,
+}
+
 #[derive(Serialize)]
 struct ErrorResponse {
     error: String,
@@ -149,52 +161,155 @@ async fn get_asset(
     Auth(principal): Auth,
     State(state): State<AppState>,
     Path(asset_id): Path<String>,
+    Query(params): Query<AssetDetailQuery>,
 ) -> Result<Json<AssetResponse>, StatusCode> {
     let conn = state.db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let (tenant_clause, tenant_params) = tenant_where(&principal);
 
-    let mut all_params = tenant_params;
-    all_params.push(asset_id.clone());
-    let aid_idx = all_params.len();
+    // Verify asset belongs to tenant and get identity
+    let mut check_params = tenant_params.clone();
+    check_params.push(asset_id.clone());
+    let aid_idx = check_params.len();
 
-    let query = format!(
-        "SELECT a.asset_id, a.pool_id, a.member_id, a.asset_type, a.lifecycle, fm.field_name, fm.value_json
-         FROM assets a
-         LEFT JOIN field_mutations fm ON fm.asset_id = a.asset_id AND fm.approval_state = 'Approved'
-         WHERE {tenant_clause} AND a.asset_id = ?{aid_idx}
-         ORDER BY fm.field_name"
+    let identity_query = format!(
+        "SELECT asset_id, pool_id, member_id, asset_type, lifecycle FROM assets a WHERE {tenant_clause} AND a.asset_id = ?{aid_idx}"
     );
-
-    let mut stmt = conn.prepare(&query).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    type Row = (String, String, String, String, String, Option<String>, Option<String>);
-    let rows: Vec<Row> = stmt
-        .query_map(rusqlite::params_from_iter(&all_params), |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?))
+    let identity: (String, String, String, String, String) = conn
+        .query_row(&identity_query, rusqlite::params_from_iter(&check_params), |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
         })
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .filter_map(|r| r.ok())
-        .collect();
+        .map_err(|_| StatusCode::NOT_FOUND)?;
 
-    if rows.is_empty() {
-        return Err(StatusCode::NOT_FOUND);
-    }
-
-    let first = &rows[0];
-    let mut asset = AssetResponse {
-        asset_id: first.0.clone(), pool_id: first.1.clone(), member_id: first.2.clone(),
-        asset_type: first.3.clone(), lifecycle: first.4.clone(),
-        fields: HashMap::new(),
+    // Resolve fields: temporal resolution via as_of date
+    // For each field, pick the latest approved mutation with effective_date <= as_of
+    let approval_filter = if params.include_pending.unwrap_or(false) {
+        "fm.approval_state IN ('Approved', 'Pending')"
+    } else {
+        "fm.approval_state = 'Approved'"
     };
 
-    for (_, _, _, _, _, fname, vjson) in &rows {
-        if let (Some(f), Some(v)) = (fname, vjson) {
-            if let Ok(fv) = serde_json::from_str::<FieldValue>(v) {
-                asset.fields.insert(f.clone(), display_field_value(&fv));
+    let fields = if let Some(as_of) = &params.as_of {
+        // Temporal query: resolve state as of a specific date
+        let mut stmt = conn.prepare(&format!(
+            "SELECT fm.field_name, fm.value_json
+             FROM field_mutations fm
+             WHERE fm.asset_id = ?1 AND {approval_filter} AND fm.effective_date <= ?2
+             ORDER BY fm.field_name, fm.effective_date DESC, fm.submitted_at DESC"
+        )).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        let rows: Vec<(String, String)> = stmt
+            .query_map(rusqlite::params![asset_id, as_of], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        // Deduplicate: keep only the first (latest) value per field_name
+        let mut fields = HashMap::new();
+        for (fname, vjson) in rows {
+            if !fields.contains_key(&fname) {
+                if let Ok(fv) = serde_json::from_str::<FieldValue>(&vjson) {
+                    fields.insert(fname, display_field_value(&fv));
+                }
             }
         }
+        fields
+    } else {
+        // Current state: latest approved mutation per field (no date filter)
+        let mut stmt = conn.prepare(&format!(
+            "SELECT fm.field_name, fm.value_json
+             FROM field_mutations fm
+             WHERE fm.asset_id = ?1 AND {approval_filter}
+             ORDER BY fm.field_name, fm.effective_date DESC, fm.submitted_at DESC"
+        )).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        let rows: Vec<(String, String)> = stmt
+            .query_map(rusqlite::params![asset_id], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        let mut fields = HashMap::new();
+        for (fname, vjson) in rows {
+            if !fields.contains_key(&fname) {
+                if let Ok(fv) = serde_json::from_str::<FieldValue>(&vjson) {
+                    fields.insert(fname, display_field_value(&fv));
+                }
+            }
+        }
+        fields
+    };
+
+    Ok(Json(AssetResponse {
+        asset_id: identity.0, pool_id: identity.1, member_id: identity.2,
+        asset_type: identity.3, lifecycle: identity.4,
+        fields,
+    }))
+}
+
+// ── PUT /api/assets/:id/fields ──────────────────────────────────────────────
+
+async fn edit_fields(
+    Auth(principal): Auth,
+    State(state): State<AppState>,
+    Path(asset_id): Path<String>,
+    Json(req): Json<EditFieldsRequest>,
+) -> Result<Json<Vec<MutationResponse>>, (StatusCode, Json<ErrorResponse>)> {
+    let conn = state.db.get()
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "DB error".into() })))?;
+
+    // Verify asset exists and belongs to tenant
+    let (tenant_clause, tenant_params) = tenant_where(&principal);
+    let mut check_params = tenant_params;
+    check_params.push(asset_id.clone());
+    let aid_idx = check_params.len();
+
+    conn.query_row(
+        &format!("SELECT 1 FROM assets a WHERE {tenant_clause} AND a.asset_id = ?{aid_idx}"),
+        rusqlite::params_from_iter(&check_params),
+        |_| Ok(()),
+    ).map_err(|_| (StatusCode::NOT_FOUND, Json(ErrorResponse { error: "Asset not found".into() })))?;
+
+    let effective_date = req.effective_date.unwrap_or_else(|| {
+        time::OffsetDateTime::now_utc().date().to_string()
+    });
+    let now = time::OffsetDateTime::now_utc();
+    let submitted_at = format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+        now.year(), now.month() as u8, now.day(),
+        now.hour(), now.minute(), now.second()
+    );
+
+    let mut created_mutations = Vec::new();
+
+    for (field_name, raw_value) in &req.fields {
+        let field_value = parse_field_value(field_name, raw_value);
+        let value_json = serde_json::to_string(&field_value).unwrap();
+        let mutation_id = MutationId::new();
+
+        // In Inc 1-4: auto-approve all edits. Inc 4+ routes through SOV pipeline.
+        conn.execute(
+            "INSERT INTO field_mutations (mutation_id, asset_id, field_name, value_json, effective_date, submitted_at, submitted_by, approval_state)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'Approved')",
+            rusqlite::params![
+                mutation_id.to_string(), asset_id, field_name, value_json,
+                effective_date, submitted_at, principal.actor_id.to_string(),
+            ],
+        ).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: format!("Mutation failed: {e}") })))?;
+
+        let raw = serde_json::from_str(&value_json).unwrap_or(serde_json::Value::Null);
+        created_mutations.push(MutationResponse {
+            mutation_id: mutation_id.to_string(),
+            field_name: field_name.clone(),
+            value: display_field_value(&field_value),
+            value_raw: raw,
+            effective_date: effective_date.clone(),
+            submitted_at: submitted_at.clone(),
+            submitted_by: principal.actor_id.to_string(),
+            approval_state: "Approved".into(),
+        });
     }
 
-    Ok(Json(asset))
+    Ok(Json(created_mutations))
 }
 
 // ── GET /api/assets/:id/mutations ───────────────────────────────────────────
@@ -367,5 +482,6 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/assets", get(list_assets).post(create_asset))
         .route("/api/assets/{id}", get(get_asset))
+        .route("/api/assets/{id}/fields", axum::routing::put(edit_fields))
         .route("/api/assets/{id}/mutations", get(get_mutations))
 }
