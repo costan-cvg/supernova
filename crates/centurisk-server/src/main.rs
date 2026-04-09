@@ -30,19 +30,18 @@ fn init_tracing() {
     let honeycomb_key = std::env::var("HONEYCOMB_API_KEY").ok();
 
     if let Some(api_key) = honeycomb_key {
-        // Honeycomb OTLP configuration via standard env vars.
-        // The SDK reads these automatically — no need to pass them programmatically.
-        // Dataset is determined by OTEL_SERVICE_NAME in modern Honeycomb (Environments & Services).
-        // x-honeycomb-dataset header is only needed for Classic keys.
-        std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "https://api.honeycomb.io");
-        std::env::set_var(
-            "OTEL_EXPORTER_OTLP_HEADERS",
-            format!("x-honeycomb-team={api_key}"),
-        );
-        std::env::set_var("OTEL_SERVICE_NAME", "riskstar");
+        // Configure tonic with TLS and Honeycomb auth header explicitly.
+        // Dataset is determined by service.name resource in modern Honeycomb.
+        use opentelemetry_otlp::{WithExportConfig, WithTonicConfig};
+
+        let mut metadata = tonic::metadata::MetadataMap::new();
+        metadata.insert("x-honeycomb-team", api_key.parse().expect("invalid API key"));
 
         let exporter = opentelemetry_otlp::SpanExporter::builder()
             .with_tonic()
+            .with_endpoint("https://api.honeycomb.io")
+            .with_tls_config(tonic::transport::ClientTlsConfig::new().with_native_roots())
+            .with_metadata(metadata)
             .build()
             .expect("Failed to create OTLP exporter");
 
