@@ -32,9 +32,16 @@ async fn search(
 ) -> Result<Json<SearchResponse>, StatusCode> {
     let conn = state.db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Ensure FTS table exists and rebuild index
-    SearchIndex::ensure_table(&conn).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    SearchIndex::rebuild(&conn).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    // Ensure FTS table exists and rebuild index (non-fatal if it fails)
+    if let Err(e) = SearchIndex::ensure_table(&conn) {
+        tracing::warn!(error = %e, "FTS5 table creation failed — search unavailable");
+        return Ok(Json(SearchResponse {
+            query: translate_query(&params.q),
+            results: vec![],
+            total: 0,
+        }));
+    }
+    let _ = SearchIndex::rebuild(&conn);
 
     // Translate natural language to structured query
     let nl_query = translate_query(&params.q);
