@@ -53,6 +53,8 @@ pub struct ListAssetsQuery {
 #[derive(Deserialize)]
 pub struct AssetDetailQuery {
     pub as_of: Option<String>,
+    /// Show state before this timestamp (ISO 8601). Useful for viewing state before a specific edit.
+    pub before: Option<String>,
     pub include_pending: Option<bool>,
 }
 
@@ -243,8 +245,32 @@ async fn get_asset(
         "fm.approval_state = 'Approved'"
     };
 
-    let fields = if let Some(as_of) = &params.as_of {
-        // Temporal query: resolve state as of a specific date
+    let fields = if let Some(before) = &params.before {
+        // Show state before a specific timestamp (excludes mutations at or after this time)
+        let mut stmt = conn.prepare(&format!(
+            "SELECT fm.field_name, fm.value_json
+             FROM field_mutations fm
+             WHERE fm.asset_id = ?1 AND {approval_filter} AND fm.submitted_at < ?2
+             ORDER BY fm.field_name, fm.effective_date DESC, fm.submitted_at DESC"
+        )).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        let rows: Vec<(String, String)> = stmt
+            .query_map(rusqlite::params![asset_id, before], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        let mut fields = HashMap::new();
+        for (fname, vjson) in rows {
+            if !fields.contains_key(&fname) {
+                if let Ok(fv) = serde_json::from_str::<FieldValue>(&vjson) {
+                    fields.insert(fname, display_field_value(&fv));
+                }
+            }
+        }
+        fields
+    } else if let Some(as_of) = &params.as_of {
+        // Temporal query: resolve state as of a specific date (end of day)
         let mut stmt = conn.prepare(&format!(
             "SELECT fm.field_name, fm.value_json
              FROM field_mutations fm
@@ -258,7 +284,6 @@ async fn get_asset(
             .filter_map(|r| r.ok())
             .collect();
 
-        // Deduplicate: keep only the first (latest) value per field_name
         let mut fields = HashMap::new();
         for (fname, vjson) in rows {
             if !fields.contains_key(&fname) {

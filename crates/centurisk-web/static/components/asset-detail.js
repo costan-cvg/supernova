@@ -125,8 +125,10 @@ class CenturiskAssetDetail extends HTMLElement {
         });
         this.shadowRoot.getElementById("clear-as-of").addEventListener("click", () => {
             this._asOfDate = null;
+            this._viewBefore = null;
             this.shadowRoot.getElementById("as-of-date").value = "";
             this.shadowRoot.getElementById("clear-as-of").style.display = "none";
+            this.shadowRoot.getElementById("as-of-notice").style.display = "none";
             this._load();
         });
         if (this._assetId) this._load();
@@ -339,12 +341,40 @@ class CenturiskAssetDetail extends HTMLElement {
             return '<tr><td>' + this._esc(label) + '</td><td>' + this._esc(m.value) + '</td>' +
                 '<td>' + this._esc(m.effective_date) + '</td>' +
                 '<td class="' + stateCls + '">' + this._esc(m.approval_state) + '</td>' +
-                '<td>' + this._esc(m.submitted_at.substring(0, 19)) + '</td></tr>';
+                '<td>' + this._esc(m.submitted_at.substring(0, 19)) + '</td>' +
+                '<td><button class="btn-view-before" data-before="' + this._esc(m.submitted_at) + '" style="font-size:0.6875rem;color:#3182ce;background:none;border:none;cursor:pointer;text-decoration:underline;">View before</button></td></tr>';
         }).join("");
 
         content.innerHTML = '<div class="card"><table><thead><tr>' +
-            '<th>Field</th><th>Value</th><th>Effective Date</th><th>Status</th><th>Submitted</th>' +
+            '<th>Field</th><th>Value</th><th>Effective Date</th><th>Status</th><th>Submitted</th><th></th>' +
             '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+
+        content.querySelectorAll(".btn-view-before").forEach(btn => {
+            btn.addEventListener("click", () => {
+                this._viewBefore = btn.dataset.before;
+                this._activeTab = "fields";
+                this.shadowRoot.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === "fields"));
+                this._loadBefore(btn.dataset.before);
+            });
+        });
+    }
+
+    async _loadBefore(beforeTimestamp) {
+        try {
+            const url = "/api/assets/" + this._assetId + "?before=" + encodeURIComponent(beforeTimestamp);
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error("Failed to load");
+            this._asset = await resp.json();
+        } catch (_) {}
+
+        // Show notice
+        const notice = this.shadowRoot.getElementById("as-of-notice");
+        notice.style.display = "block";
+        notice.textContent = "Showing state before change at " + beforeTimestamp.substring(0, 19) + ". Click 'Current' to return.";
+        this.shadowRoot.getElementById("clear-as-of").style.display = "inline";
+
+        this._renderHeader();
+        this._renderContent();
     }
 
     _esc(str) { const d = document.createElement("div"); d.textContent = str || ""; return d.innerHTML; }
