@@ -27,10 +27,31 @@ template.innerHTML = `
     .empty-state { text-align: center; padding: 3rem 1rem; color: var(--color-text-muted, #718096); background: #fff; border-radius: 6px; border: 1px dashed var(--color-border, #e2e8f0); }
     .empty-state p { margin-bottom: 1rem; }
     .money { font-variant-numeric: tabular-nums; }
+    .filters { display: flex; gap: 0.75rem; margin-bottom: 1rem; }
+    .filters input, .filters select { padding: 0.375rem 0.75rem; border: 1px solid var(--color-border, #e2e8f0); border-radius: 4px; font-size: 0.875rem; font-family: inherit; }
+    .filters input { flex: 1; }
+    .filters select { min-width: 130px; }
 </style>
 <div class="toolbar">
     <h2>Assets</h2>
     <button class="btn-primary" id="add-btn">+ Add Asset</button>
+</div>
+<div class="filters" id="filters">
+    <input type="text" id="search" placeholder="Search assets..." />
+    <select id="type-filter">
+        <option value="">All Types</option>
+        <option value="Building">Building</option>
+        <option value="Contents">Contents</option>
+        <option value="Vehicle">Vehicle</option>
+        <option value="FineArts">Fine Arts</option>
+    </select>
+    <select id="lifecycle-filter">
+        <option value="">All Statuses</option>
+        <option value="Active">Active</option>
+        <option value="Draft">Draft</option>
+        <option value="PendingChange">Pending</option>
+        <option value="Archived">Archived</option>
+    </select>
 </div>
 <div id="content"></div>
 `;
@@ -51,12 +72,29 @@ class CenturiskAssetList extends HTMLElement {
                 composed: true,
             }));
         });
+
+        // Filter controls
+        let debounce;
+        const reload = () => { clearTimeout(debounce); debounce = setTimeout(() => this.load(), 200); };
+        this.shadowRoot.getElementById("search").addEventListener("input", reload);
+        this.shadowRoot.getElementById("type-filter").addEventListener("change", () => this.load());
+        this.shadowRoot.getElementById("lifecycle-filter").addEventListener("change", () => this.load());
+
         this.load();
     }
 
     async load() {
+        const params = new URLSearchParams();
+        const search = this.shadowRoot.getElementById("search")?.value;
+        const typeFilter = this.shadowRoot.getElementById("type-filter")?.value;
+        const lifecycleFilter = this.shadowRoot.getElementById("lifecycle-filter")?.value;
+        if (search) params.set("search", search);
+        if (typeFilter) params.set("asset_type", typeFilter);
+        if (lifecycleFilter) params.set("lifecycle", lifecycleFilter);
+
         try {
-            const resp = await fetch("/api/assets");
+            const url = "/api/assets" + (params.toString() ? "?" + params.toString() : "");
+            const resp = await fetch(url);
             if (!resp.ok) throw new Error(resp.statusText);
             this._assets = await resp.json();
         } catch (e) {

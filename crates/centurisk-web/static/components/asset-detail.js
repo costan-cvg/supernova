@@ -1,0 +1,186 @@
+/**
+ * <centurisk-asset-detail> — Full asset detail view with fields + mutation history.
+ * Set .assetId property to load.
+ */
+
+const template = document.createElement("template");
+template.innerHTML = `
+<style>
+    :host { display: block; }
+    .header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+    .back-btn { background: none; border: 1px solid var(--color-border, #e2e8f0); border-radius: 4px; padding: 0.375rem 0.75rem; font-size: 0.875rem; cursor: pointer; color: var(--color-text, #2d3748); }
+    h2 { font-size: 1.25rem; font-weight: 600; color: var(--color-text, #2d3748); margin: 0; }
+    .badge { display: inline-block; padding: 0.125rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; margin-left: 0.5rem; }
+    .badge-building { background: #ebf4ff; color: #2b6cb0; }
+    .badge-contents { background: #fefcbf; color: #975a16; }
+    .badge-vehicle { background: #e9d8fd; color: #6b46c1; }
+    .badge-finearts { background: #fed7e2; color: #c53030; }
+    .badge-active { background: #c6f6d5; color: #276749; }
+    .badge-draft { background: #e2e8f0; color: #4a5568; }
+
+    .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--color-border, #e2e8f0); margin-bottom: 1.5rem; }
+    .tab { padding: 0.625rem 1.25rem; font-size: 0.875rem; font-weight: 500; cursor: pointer; border: none; background: none; color: var(--color-text-muted, #718096); border-bottom: 2px solid transparent; }
+    .tab:hover { color: var(--color-text, #2d3748); }
+    .tab.active { color: var(--color-primary, #1a365d); border-bottom-color: var(--color-primary, #1a365d); }
+
+    .card { background: #fff; border-radius: 6px; padding: 1.5rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+    .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .field-item { }
+    .field-label { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-muted, #718096); margin-bottom: 0.25rem; }
+    .field-value { font-size: 0.9375rem; color: var(--color-text, #2d3748); }
+    .field-value.money { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 0.5rem 0.75rem; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-muted, #718096); border-bottom: 1px solid var(--color-border, #e2e8f0); }
+    td { padding: 0.5rem 0.75rem; font-size: 0.8125rem; border-bottom: 1px solid var(--color-border, #e2e8f0); color: var(--color-text, #2d3748); }
+    .state-approved { color: #276749; }
+    .state-pending { color: #975a16; }
+    .state-rejected { color: #9b2c2c; }
+    .empty { text-align: center; padding: 2rem; color: var(--color-text-muted, #718096); }
+    .loading { text-align: center; padding: 2rem; color: var(--color-text-muted, #718096); }
+</style>
+<div class="header">
+    <button class="back-btn" id="back-btn">&larr; Back</button>
+    <h2 id="title">Loading...</h2>
+</div>
+<div class="tabs">
+    <button class="tab active" data-tab="fields">Fields</button>
+    <button class="tab" data-tab="history">History</button>
+</div>
+<div id="content"><div class="loading">Loading asset...</div></div>
+`;
+
+class CenturiskAssetDetail extends HTMLElement {
+    constructor() {
+        super();
+        this.attachShadow({ mode: "open" });
+        this.shadowRoot.appendChild(template.content.cloneNode(true));
+        this._asset = null;
+        this._mutations = [];
+        this._activeTab = "fields";
+    }
+
+    connectedCallback() {
+        this.shadowRoot.getElementById("back-btn").addEventListener("click", () => {
+            this.dispatchEvent(new CustomEvent("navigate", { detail: { page: "assets" }, bubbles: true, composed: true }));
+        });
+        this.shadowRoot.querySelectorAll(".tab").forEach(tab => {
+            tab.addEventListener("click", () => {
+                this._activeTab = tab.dataset.tab;
+                this.shadowRoot.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === this._activeTab));
+                this._renderContent();
+            });
+        });
+        if (this._assetId) this._load();
+    }
+
+    set assetId(id) {
+        this._assetId = id;
+        if (this.isConnected) this._load();
+    }
+
+    async _load() {
+        try {
+            const [assetResp, mutResp] = await Promise.all([
+                fetch("/api/assets/" + this._assetId),
+                fetch("/api/assets/" + this._assetId + "/mutations"),
+            ]);
+            if (!assetResp.ok) throw new Error("Asset not found");
+            this._asset = await assetResp.json();
+            this._mutations = mutResp.ok ? await mutResp.json() : [];
+        } catch (e) {
+            this._asset = null;
+            this._mutations = [];
+        }
+        this._renderHeader();
+        this._renderContent();
+    }
+
+    _renderHeader() {
+        const title = this.shadowRoot.getElementById("title");
+        if (!this._asset) { title.textContent = "Asset not found"; return; }
+        const a = this._asset;
+        const name = a.fields.building_name || a.asset_type + " " + a.asset_id.substring(0, 8);
+        const typeCls = "badge-" + a.asset_type.toLowerCase().replace(/\s/g, "");
+        const lifeCls = "badge-" + a.lifecycle.toLowerCase().replace("pendingchange", "pending");
+        title.innerHTML = this._esc(name) +
+            ' <span class="badge ' + typeCls + '">' + this._esc(a.asset_type) + '</span>' +
+            ' <span class="badge ' + lifeCls + '">' + this._esc(a.lifecycle) + '</span>';
+    }
+
+    _renderContent() {
+        const content = this.shadowRoot.getElementById("content");
+        if (!this._asset) { content.innerHTML = '<div class="empty">Asset not found.</div>'; return; }
+
+        if (this._activeTab === "fields") {
+            this._renderFields(content);
+        } else {
+            this._renderHistory(content);
+        }
+    }
+
+    _renderFields(content) {
+        const a = this._asset;
+        const fieldOrder = [
+            "building_name", "address", "city", "state", "zip_code",
+            "asset_type", "construction_class", "occupancy", "year_built",
+            "sq_footage", "stories", "roof_type", "sprinkler",
+            "replacement_cost", "contents_value"
+        ];
+
+        const entries = [];
+        for (const key of fieldOrder) {
+            if (a.fields[key]) entries.push([key, a.fields[key]]);
+        }
+        // Add any fields not in the predefined order
+        for (const [key, val] of Object.entries(a.fields)) {
+            if (!fieldOrder.includes(key)) entries.push([key, val]);
+        }
+
+        if (entries.length === 0) {
+            content.innerHTML = '<div class="card"><div class="empty">No field data.</div></div>';
+            return;
+        }
+
+        const items = entries.map(([key, val]) => {
+            const label = key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+            const cls = (key === "replacement_cost" || key === "contents_value") ? ' money' : '';
+            return '<div class="field-item"><div class="field-label">' + this._esc(label) +
+                '</div><div class="field-value' + cls + '">' + this._esc(val) + '</div></div>';
+        }).join("");
+
+        content.innerHTML = '<div class="card"><div class="field-grid">' + items + '</div></div>';
+    }
+
+    _renderHistory(content) {
+        if (this._mutations.length === 0) {
+            content.innerHTML = '<div class="card"><div class="empty">No mutation history.</div></div>';
+            return;
+        }
+
+        const rows = this._mutations.map(m => {
+            const stateCls = "state-" + m.approval_state.toLowerCase();
+            const date = m.effective_date;
+            const label = m.field_name.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+            return '<tr>' +
+                '<td>' + this._esc(label) + '</td>' +
+                '<td>' + this._esc(m.value) + '</td>' +
+                '<td>' + this._esc(date) + '</td>' +
+                '<td class="' + stateCls + '">' + this._esc(m.approval_state) + '</td>' +
+                '<td>' + this._esc(m.submitted_at.substring(0, 19)) + '</td>' +
+                '</tr>';
+        }).join("");
+
+        content.innerHTML = '<div class="card"><table><thead><tr>' +
+            '<th>Field</th><th>Value</th><th>Effective Date</th><th>Status</th><th>Submitted</th>' +
+            '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+    }
+
+    _esc(str) {
+        const d = document.createElement("div");
+        d.textContent = str || "";
+        return d.innerHTML;
+    }
+}
+
+customElements.define("centurisk-asset-detail", CenturiskAssetDetail);

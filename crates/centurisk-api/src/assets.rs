@@ -1,4 +1,7 @@
-use axum::{Json, Router, extract::State, http::StatusCode, routing::get};
+use axum::extract::{Path, Query, State};
+use axum::http::StatusCode;
+use axum::routing::get;
+use axum::{Json, Router};
 use centurisk_core::asset::{AssetType, LifecycleState};
 use centurisk_core::field_value::FieldValue;
 use centurisk_core::ids::{AssetId, MemberId, MutationId, PoolId};
@@ -10,12 +13,28 @@ use std::str::FromStr;
 use crate::AppState;
 use crate::auth::Auth;
 
+// ── Response types ──────────────────────────────────────────────────────────
+
 #[derive(Serialize)]
 pub struct AssetResponse {
     pub asset_id: String,
+    pub pool_id: String,
+    pub member_id: String,
     pub asset_type: String,
     pub lifecycle: String,
     pub fields: HashMap<String, String>,
+}
+
+#[derive(Serialize)]
+pub struct MutationResponse {
+    pub mutation_id: String,
+    pub field_name: String,
+    pub value: String,
+    pub value_raw: serde_json::Value,
+    pub effective_date: String,
+    pub submitted_at: String,
+    pub submitted_by: String,
+    pub approval_state: String,
 }
 
 #[derive(Deserialize)]
@@ -24,77 +43,220 @@ pub struct CreateAssetRequest {
     pub fields: HashMap<String, String>,
 }
 
+#[derive(Deserialize)]
+pub struct ListAssetsQuery {
+    pub asset_type: Option<String>,
+    pub lifecycle: Option<String>,
+    pub search: Option<String>,
+}
+
 #[derive(Serialize)]
 struct ErrorResponse {
     error: String,
 }
 
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+/// Build a WHERE clause from the principal's tenant scope.
+fn tenant_where(principal: &centurisk_auth::Principal) -> (String, Vec<String>) {
+    let tenant = crate::auth::tenant_from_principal(principal);
+    match tenant {
+        Some(t) => {
+            if let Some(mid) = t.member_id {
+                ("a.pool_id = ?1 AND a.member_id = ?2".into(), vec![t.pool_id.to_string(), mid.to_string()])
+            } else {
+                ("a.pool_id = ?1".into(), vec![t.pool_id.to_string()])
+            }
+        }
+        None => ("1=1".into(), vec![]), // CentuRisk admin sees all
+    }
+}
+
+// ── GET /api/assets ─────────────────────────────────────────────────────────
+
 async fn list_assets(
     Auth(principal): Auth,
     State(state): State<AppState>,
+    Query(params): Query<ListAssetsQuery>,
 ) -> Result<Json<Vec<AssetResponse>>, StatusCode> {
-    let tenant = crate::auth::tenant_from_principal(&principal);
     let conn = state.db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let (tenant_clause, tenant_params) = tenant_where(&principal);
 
-    // CentuRisk admins without a pool see all assets; scoped users see their pool only
-    let (query, pool_filter): (&str, Option<String>) = match &tenant {
-        Some(t) => (
-            "SELECT a.asset_id, a.asset_type, a.lifecycle, fm.field_name, fm.value_json
-             FROM assets a
-             LEFT JOIN field_mutations fm ON fm.asset_id = a.asset_id AND fm.approval_state = 'Approved'
-             WHERE a.pool_id = ?1
-             ORDER BY a.created_at DESC, fm.field_name",
-            Some(t.pool_id.to_string()),
-        ),
-        None => (
-            "SELECT a.asset_id, a.asset_type, a.lifecycle, fm.field_name, fm.value_json
-             FROM assets a
-             LEFT JOIN field_mutations fm ON fm.asset_id = a.asset_id AND fm.approval_state = 'Approved'
-             ORDER BY a.created_at DESC, fm.field_name",
-            None,
-        ),
-    };
+    // Build dynamic filters
+    let mut where_parts = vec![tenant_clause];
+    let mut all_params: Vec<String> = tenant_params;
 
-    type Row = (String, String, String, Option<String>, Option<String>);
+    if let Some(at) = &params.asset_type {
+        all_params.push(at.clone());
+        where_parts.push(format!("a.asset_type = ?{}", all_params.len()));
+    }
+    if let Some(lc) = &params.lifecycle {
+        all_params.push(lc.clone());
+        where_parts.push(format!("a.lifecycle = ?{}", all_params.len()));
+    }
 
-    let rows: Vec<Row> = if let Some(pid) = &pool_filter {
-        let mut stmt = conn.prepare(query).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        let result: Vec<Row> = stmt.query_map(rusqlite::params![pid], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
-        }).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .filter_map(|r| r.ok()).collect();
-        result
-    } else {
-        let mut stmt = conn.prepare(query).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        let result: Vec<Row> = stmt.query_map([], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
-        }).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .filter_map(|r| r.ok()).collect();
-        result
-    };
+    let where_sql = where_parts.join(" AND ");
+    let query = format!(
+        "SELECT a.asset_id, a.pool_id, a.member_id, a.asset_type, a.lifecycle, fm.field_name, fm.value_json
+         FROM assets a
+         LEFT JOIN field_mutations fm ON fm.asset_id = a.asset_id AND fm.approval_state = 'Approved'
+         WHERE {where_sql}
+         ORDER BY a.created_at DESC, fm.field_name"
+    );
 
-    // Group by asset_id
+    let mut stmt = conn.prepare(&query).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    type Row = (String, String, String, String, String, Option<String>, Option<String>);
+    let results: Vec<Row> = stmt
+        .query_map(rusqlite::params_from_iter(&all_params), |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?))
+        })
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .filter_map(|r| r.ok())
+        .collect();
+
     let mut assets: HashMap<String, AssetResponse> = HashMap::new();
-    for (asset_id, asset_type, lifecycle, field_name, value_json) in rows {
+    for (asset_id, pool_id, member_id, asset_type, lifecycle, field_name, value_json) in results {
         let entry = assets.entry(asset_id.clone()).or_insert_with(|| AssetResponse {
-            asset_id,
-            asset_type,
-            lifecycle,
+            asset_id, pool_id, member_id, asset_type, lifecycle,
             fields: HashMap::new(),
         });
-
         if let (Some(fname), Some(vjson)) = (field_name, value_json) {
-            // Parse FieldValue and extract display string
             if let Ok(fv) = serde_json::from_str::<FieldValue>(&vjson) {
                 entry.fields.insert(fname, display_field_value(&fv));
             }
         }
     }
 
-    let mut result: Vec<AssetResponse> = assets.into_values().collect();
+    // Optional text search across field values
+    let mut result: Vec<AssetResponse> = if let Some(search) = &params.search {
+        let s = search.to_lowercase();
+        assets.into_values().filter(|a| {
+            a.fields.values().any(|v| v.to_lowercase().contains(&s))
+                || a.asset_type.to_lowercase().contains(&s)
+        }).collect()
+    } else {
+        assets.into_values().collect()
+    };
+
     result.sort_by(|a, b| a.asset_id.cmp(&b.asset_id));
     Ok(Json(result))
 }
+
+// ── GET /api/assets/:id ─────────────────────────────────────────────────────
+
+async fn get_asset(
+    Auth(principal): Auth,
+    State(state): State<AppState>,
+    Path(asset_id): Path<String>,
+) -> Result<Json<AssetResponse>, StatusCode> {
+    let conn = state.db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let (tenant_clause, tenant_params) = tenant_where(&principal);
+
+    let mut all_params = tenant_params;
+    all_params.push(asset_id.clone());
+    let aid_idx = all_params.len();
+
+    let query = format!(
+        "SELECT a.asset_id, a.pool_id, a.member_id, a.asset_type, a.lifecycle, fm.field_name, fm.value_json
+         FROM assets a
+         LEFT JOIN field_mutations fm ON fm.asset_id = a.asset_id AND fm.approval_state = 'Approved'
+         WHERE {tenant_clause} AND a.asset_id = ?{aid_idx}
+         ORDER BY fm.field_name"
+    );
+
+    let mut stmt = conn.prepare(&query).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    type Row = (String, String, String, String, String, Option<String>, Option<String>);
+    let rows: Vec<Row> = stmt
+        .query_map(rusqlite::params_from_iter(&all_params), |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?))
+        })
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    if rows.is_empty() {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    let first = &rows[0];
+    let mut asset = AssetResponse {
+        asset_id: first.0.clone(), pool_id: first.1.clone(), member_id: first.2.clone(),
+        asset_type: first.3.clone(), lifecycle: first.4.clone(),
+        fields: HashMap::new(),
+    };
+
+    for (_, _, _, _, _, fname, vjson) in &rows {
+        if let (Some(f), Some(v)) = (fname, vjson) {
+            if let Ok(fv) = serde_json::from_str::<FieldValue>(v) {
+                asset.fields.insert(f.clone(), display_field_value(&fv));
+            }
+        }
+    }
+
+    Ok(Json(asset))
+}
+
+// ── GET /api/assets/:id/mutations ───────────────────────────────────────────
+
+async fn get_mutations(
+    Auth(principal): Auth,
+    State(state): State<AppState>,
+    Path(asset_id): Path<String>,
+) -> Result<Json<Vec<MutationResponse>>, StatusCode> {
+    let conn = state.db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let (tenant_clause, tenant_params) = tenant_where(&principal);
+
+    let mut all_params = tenant_params;
+    all_params.push(asset_id.clone());
+    let aid_idx = all_params.len();
+
+    // Verify asset belongs to tenant
+    let check_query = format!(
+        "SELECT 1 FROM assets a WHERE {tenant_clause} AND a.asset_id = ?{aid_idx}"
+    );
+    conn.query_row(&check_query, rusqlite::params_from_iter(&all_params), |_| Ok(()))
+        .map_err(|_| StatusCode::NOT_FOUND)?;
+
+    // Get all mutations ordered by field + date
+    let mut stmt = conn.prepare(
+        "SELECT mutation_id, field_name, value_json, effective_date, submitted_at, submitted_by, approval_state
+         FROM field_mutations
+         WHERE asset_id = ?1
+         ORDER BY field_name, effective_date DESC, submitted_at DESC"
+    ).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let mutations: Vec<MutationResponse> = stmt
+        .query_map(rusqlite::params![asset_id], |row| {
+            let value_json_str: String = row.get(2)?;
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                value_json_str,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, String>(6)?,
+            ))
+        })
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .filter_map(|r| r.ok())
+        .map(|(mid, fname, vjson, edate, sat, sby, astate)| {
+            let display = serde_json::from_str::<FieldValue>(&vjson)
+                .map(|fv| display_field_value(&fv))
+                .unwrap_or_else(|_| vjson.clone());
+            let raw = serde_json::from_str(&vjson).unwrap_or(serde_json::Value::Null);
+            MutationResponse {
+                mutation_id: mid, field_name: fname, value: display, value_raw: raw,
+                effective_date: edate, submitted_at: sat, submitted_by: sby, approval_state: astate,
+            }
+        })
+        .collect();
+
+    Ok(Json(mutations))
+}
+
+// ── POST /api/assets ────────────────────────────────────────────────────────
 
 async fn create_asset(
     Auth(principal): Auth,
@@ -110,11 +272,9 @@ async fn create_asset(
     };
 
     let asset_id = AssetId::new();
-
     let conn = state.db.get()
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "DB error".into() })))?;
 
-    // Resolve pool_id: from principal, or first pool in DB for admins
     let pool_id = if let Some(pid) = principal.pool_id {
         pid
     } else {
@@ -124,37 +284,28 @@ async fn create_asset(
         PoolId::from_uuid(uuid::Uuid::parse_str(&pid_str).unwrap())
     };
 
-    // Resolve member_id: from principal, or first member in the pool
     let member_id = if let Some(mid) = principal.member_id {
         mid
     } else {
         let mid_str: String = conn
-            .query_row(
-                "SELECT member_id FROM members WHERE pool_id = ?1 LIMIT 1",
-                rusqlite::params![pool_id.to_string()],
-                |row| row.get(0),
-            )
+            .query_row("SELECT member_id FROM members WHERE pool_id = ?1 LIMIT 1",
+                rusqlite::params![pool_id.to_string()], |row| row.get(0))
             .map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "No member found in pool".into() })))?;
         MemberId::from_uuid(uuid::Uuid::parse_str(&mid_str).unwrap())
     };
+
     let path = format!("/{}/{}/{}", pool_id, member_id, asset_id);
 
-    // Insert asset
     conn.execute(
         "INSERT INTO assets (asset_id, pool_id, member_id, path, asset_type, lifecycle, created_by)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         rusqlite::params![
-            asset_id.to_string(),
-            pool_id.to_string(),
-            member_id.to_string(),
-            path,
-            format!("{:?}", asset_type),
-            format!("{:?}", LifecycleState::Draft),
+            asset_id.to_string(), pool_id.to_string(), member_id.to_string(),
+            path, format!("{:?}", asset_type), format!("{:?}", LifecycleState::Draft),
             principal.actor_id.to_string(),
         ],
     ).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: format!("Insert failed: {e}") })))?;
 
-    // Insert field mutations (auto-approved for admin in Inc 1-4)
     let today = time::OffsetDateTime::now_utc().date();
     let effective_date = format!("{}", today);
     let mut display_fields = HashMap::new();
@@ -162,70 +313,43 @@ async fn create_asset(
     for (field_name, raw_value) in &req.fields {
         let field_value = parse_field_value(field_name, raw_value);
         let value_json = serde_json::to_string(&field_value).unwrap();
-
         let mutation_id = MutationId::new();
         conn.execute(
             "INSERT INTO field_mutations (mutation_id, asset_id, field_name, value_json, effective_date, submitted_by, approval_state)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'Approved')",
-            rusqlite::params![
-                mutation_id.to_string(),
-                asset_id.to_string(),
-                field_name,
-                value_json,
-                effective_date,
-                principal.actor_id.to_string(),
-            ],
+            rusqlite::params![mutation_id.to_string(), asset_id.to_string(), field_name, value_json, effective_date, principal.actor_id.to_string()],
         ).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: format!("Mutation failed: {e}") })))?;
-
         display_fields.insert(field_name.clone(), display_field_value(&field_value));
     }
 
-    Ok((
-        StatusCode::CREATED,
-        Json(AssetResponse {
-            asset_id: asset_id.to_string(),
-            asset_type: format!("{:?}", asset_type),
-            lifecycle: "Draft".into(),
-            fields: display_fields,
-        }),
-    ))
+    Ok((StatusCode::CREATED, Json(AssetResponse {
+        asset_id: asset_id.to_string(), pool_id: pool_id.to_string(), member_id: member_id.to_string(),
+        asset_type: format!("{:?}", asset_type), lifecycle: "Draft".into(), fields: display_fields,
+    })))
 }
 
-/// Parse a raw string value into a typed FieldValue based on field name conventions.
-fn parse_field_value(field_name: &str, raw: &str) -> FieldValue {
+// ── Field value parsing / display ───────────────────────────────────────────
+
+pub fn parse_field_value(field_name: &str, raw: &str) -> FieldValue {
     match field_name {
         "replacement_cost" | "contents_value" => {
-            if let Ok(amount) = Decimal::from_str(raw) {
-                FieldValue::Money { amount, currency: "USD".into() }
-            } else {
-                FieldValue::Text(raw.into())
-            }
+            Decimal::from_str(raw).map(|a| FieldValue::Money { amount: a, currency: "USD".into() })
+                .unwrap_or_else(|_| FieldValue::Text(raw.into()))
         }
         "year_built" | "sq_footage" | "stories" | "elevator_count" | "parking_spaces"
         | "electrical_update_year" | "plumbing_update_year" => {
-            if let Ok(n) = Decimal::from_str(raw) {
-                FieldValue::Number(n)
-            } else {
-                FieldValue::Text(raw.into())
-            }
+            Decimal::from_str(raw).map(FieldValue::Number).unwrap_or_else(|_| FieldValue::Text(raw.into()))
         }
         "sprinkler" | "basement" | "fire_alarm" | "security_system" => {
-            FieldValue::Bool(raw == "true" || raw == "yes" || raw == "1")
+            FieldValue::Bool(matches!(raw, "true" | "yes" | "1"))
         }
         "construction_class" | "occupancy" | "roof_type" | "foundation_type"
-        | "heating_type" | "cooling_type" | "flood_zone" | "ais_zone" => {
-            FieldValue::Enum(raw.into())
-        }
-        "appraisal_date" => {
-            // Try to parse as date
-            FieldValue::Text(raw.into()) // Simplified — full date parsing in Inc 2
-        }
+        | "heating_type" | "cooling_type" | "flood_zone" | "ais_zone" => FieldValue::Enum(raw.into()),
         _ => FieldValue::Text(raw.into()),
     }
 }
 
-/// Convert a FieldValue to a display string for the API response.
-fn display_field_value(fv: &FieldValue) -> String {
+pub fn display_field_value(fv: &FieldValue) -> String {
     match fv {
         FieldValue::Text(s) => s.clone(),
         FieldValue::Number(n) => n.to_string(),
@@ -233,11 +357,15 @@ fn display_field_value(fv: &FieldValue) -> String {
         FieldValue::Bool(b) => if *b { "Yes" } else { "No" }.into(),
         FieldValue::Enum(s) => s.clone(),
         FieldValue::Money { amount, currency } => format!("${} {}", amount, currency),
-        FieldValue::Null => "—".into(),
+        FieldValue::Null => "\u{2014}".into(),
     }
 }
+
+// ── Routes ──────────────────────────────────────────────────────────────────
 
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/assets", get(list_assets).post(create_asset))
+        .route("/api/assets/{id}", get(get_asset))
+        .route("/api/assets/{id}/mutations", get(get_mutations))
 }

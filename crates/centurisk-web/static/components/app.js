@@ -1,6 +1,7 @@
 import "./nav-sidebar.js";
 import "./asset-list.js";
 import "./asset-form.js";
+import "./asset-detail.js";
 import "./login-page.js";
 
 const PAGE_TITLES = {
@@ -227,7 +228,7 @@ class CenturiskApp extends HTMLElement {
         });
     }
 
-    _setPage(id) {
+    _setPage(id, detail) {
         this._currentPage = id;
         const title = PAGE_TITLES[id] || id;
         const titleEl = this.shadowRoot.querySelector(".page-title");
@@ -245,6 +246,14 @@ class CenturiskApp extends HTMLElement {
                 content.innerHTML = "";
                 content.appendChild(document.createElement("centurisk-asset-form"));
                 break;
+            case "asset-detail": {
+                content.innerHTML = "";
+                const detailEl = document.createElement("centurisk-asset-detail");
+                if (detail && detail.assetId) detailEl.assetId = detail.assetId;
+                content.appendChild(detailEl);
+                if (titleEl) titleEl.textContent = "Asset Detail";
+                break;
+            }
             default:
                 content.innerHTML = '<div class="placeholder">' + title + ' content will appear here.</div>';
                 break;
