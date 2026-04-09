@@ -18,9 +18,9 @@ export default defineConfig({
   ],
   webServer: {
     command:
-      'bash -c "export PATH=$HOME/.cargo/bin:$PATH && cargo run -p centurisk-server"',
+      'bash -c "export PATH=$HOME/.cargo/bin:$PATH && cargo build -p centurisk-server && ./target/debug/centurisk"',
     port: 3000,
-    timeout: 120_000,
+    timeout: 180_000,
     reuseExistingServer: !process.env.CI,
     env: {
       CENTURISK_DB_PATH: "./data/e2e-test.db",

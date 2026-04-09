@@ -22,7 +22,8 @@ async fn main() {
         .init();
 
     let db = centurisk_db::init_db(&db_path()).expect("Failed to initialize database");
-    let policy = Arc::new(centurisk_auth::AllowAllPolicy);
+    let policy = Arc::new(centurisk_auth::CedarPolicyGate::new());
+    tracing::info!("Cedar ABAC policy engine loaded");
 
     let state = centurisk_api::AppState { db, policy };
 

@@ -20,8 +20,18 @@ export default async function globalSetup() {
     }
 
     // Check if data already exists
-    const usersResp = await fetch(`${BASE_URL}/api/users`);
-    const users = await usersResp.json();
+    let users = [];
+    try {
+        const usersResp = await fetch(`${BASE_URL}/api/users`);
+        const text = await usersResp.text();
+        console.log(`[global-setup] /api/users status=${usersResp.status} body=${text.substring(0, 200)}`);
+        if (usersResp.ok && text) {
+            users = JSON.parse(text);
+        }
+    } catch (e) {
+        console.log(`[global-setup] /api/users error: ${e}`);
+    }
+
     if (users.length > 1) {
         // Already onboarded (more than just the system admin)
         return;

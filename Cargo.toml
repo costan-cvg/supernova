@@ -44,6 +44,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 # Testing
 proptest = "1"
 
+# Cedar ABAC
+cedar-policy = "4"
+
 # CSV
 csv = "1"
 

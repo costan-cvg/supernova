@@ -2,13 +2,16 @@
 //!
 //! Key types:
 //! - `PolicyGate` trait: called on every data path from Inc 1 onward
-//! - `AllowAllPolicy`: permissive stub, logs every decision (replaced by Cedar in Inc 5)
+//! - `CedarPolicyGate`: Cedar ABAC engine (Inc 5+)
+//! - `AllowAllPolicy`: permissive stub for testing
 //! - `TenantContext`: required on every repository operation for pool/member isolation
 
+pub mod cedar;
 pub mod policy;
 pub mod tenant;
 pub mod principal;
 
+pub use cedar::CedarPolicyGate;
 pub use policy::{AllowAllPolicy, AuthzDecision, PolicyGate};
 pub use principal::Principal;
 pub use tenant::TenantContext;

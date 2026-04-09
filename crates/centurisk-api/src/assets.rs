@@ -84,6 +84,34 @@ pub fn tenant_where(principal: &centurisk_auth::Principal) -> (String, Vec<Strin
     }
 }
 
+/// Check Cedar authorization. Returns 403 if denied.
+fn check_auth(
+    state: &AppState,
+    principal: &centurisk_auth::Principal,
+    action: &str,
+    resource_type: &str,
+) -> Result<(), StatusCode> {
+    use centurisk_auth::policy::{Action, Resource};
+    let decision = state.policy.authorize(
+        principal,
+        &Action(action.into()),
+        &Resource { resource_type: resource_type.into(), resource_id: None, pool_id: principal.pool_id, field_name: None },
+    );
+    match decision {
+        centurisk_auth::AuthzDecision::Permit => Ok(()),
+        centurisk_auth::AuthzDecision::Deny { .. } => Err(StatusCode::FORBIDDEN),
+    }
+}
+
+/// Filter fields based on Cedar field-level visibility.
+fn filter_fields(state: &AppState, principal: &centurisk_auth::Principal, fields: &mut HashMap<String, String>) {
+    if let Some(pool_id) = principal.pool_id {
+        if let Some(visible) = state.policy.visible_fields(principal, "Asset", &pool_id) {
+            fields.retain(|k, _| visible.contains(k));
+        }
+    }
+}
+
 // ── GET /api/assets ─────────────────────────────────────────────────────────
 
 async fn list_assets(
@@ -91,6 +119,7 @@ async fn list_assets(
     State(state): State<AppState>,
     Query(params): Query<ListAssetsQuery>,
 ) -> Result<Json<Vec<AssetResponse>>, StatusCode> {
+    check_auth(&state, &principal, "read", "Asset")?;
     let conn = state.db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let (tenant_clause, tenant_params) = tenant_where(&principal);
 
@@ -151,6 +180,10 @@ async fn list_assets(
         assets.into_values().collect()
     };
 
+    // Apply field-level visibility filtering
+    for asset in &mut result {
+        filter_fields(&state, &principal, &mut asset.fields);
+    }
     result.sort_by(|a, b| a.asset_id.cmp(&b.asset_id));
     Ok(Json(result))
 }
@@ -163,6 +196,7 @@ async fn get_asset(
     Path(asset_id): Path<String>,
     Query(params): Query<AssetDetailQuery>,
 ) -> Result<Json<AssetResponse>, StatusCode> {
+    check_auth(&state, &principal, "read", "Asset")?;
     let conn = state.db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let (tenant_clause, tenant_params) = tenant_where(&principal);
 
@@ -239,11 +273,13 @@ async fn get_asset(
         fields
     };
 
-    Ok(Json(AssetResponse {
+    let mut response = AssetResponse {
         asset_id: identity.0, pool_id: identity.1, member_id: identity.2,
         asset_type: identity.3, lifecycle: identity.4,
         fields,
-    }))
+    };
+    filter_fields(&state, &principal, &mut response.fields);
+    Ok(Json(response))
 }
 
 // ── PUT /api/assets/:id/fields ──────────────────────────────────────────────
@@ -254,6 +290,10 @@ async fn edit_fields(
     Path(asset_id): Path<String>,
     Json(req): Json<EditFieldsRequest>,
 ) -> Result<Json<Vec<MutationResponse>>, (StatusCode, Json<ErrorResponse>)> {
+    // Cedar write authorization
+    check_auth(&state, &principal, "write", "Asset")
+        .map_err(|s| (s, Json(ErrorResponse { error: "Not authorized to edit assets".into() })))?;
+
     let conn = state.db.get()
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "DB error".into() })))?;
 

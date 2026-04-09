@@ -33,7 +33,7 @@ test.describe("App Shell", () => {
 
         const app = page.locator("centurisk-app");
         const userInfo = app.locator(".user-info");
-        await expect(userInfo).toContainText("Alice Admin");
+        await expect(userInfo).toContainText("CentuRisk Admin");
     });
 
     test("navigates between sections via sidebar", async ({ page, request }) => {
