@@ -287,6 +287,21 @@ async fn onboard_pool(
         });
     }
 
+    // Create a read-only user for the first member (for Cedar demo)
+    if let Some(first_member) = member_results.first() {
+        let ro_user_id = ActorId::new();
+        let _ = conn.execute(
+            "INSERT INTO users (user_id, email, display_name, category, pool_id, member_id) VALUES (?1, ?2, ?3, 'MemberReadOnly', ?4, ?5)",
+            rusqlite::params![
+                ro_user_id.to_string(),
+                format!("readonly@{}.gov", req.pool_name.to_lowercase().replace(' ', "-")),
+                format!("{} (Read-Only)", first_member.member_name),
+                pool_id.to_string(),
+                first_member.member_id,
+            ],
+        );
+    }
+
     // Create a pool admin user
     let pool_admin_id = ActorId::new();
     let pool_slug = req.pool_name.to_lowercase().replace(' ', "-");

@@ -204,7 +204,10 @@ class CenturiskAssetDetail extends HTMLElement {
             return;
         }
 
-        const editBtn = this._asOfDate ? '' : '<button class="btn-edit" id="edit-btn">Edit Fields</button>';
+        const user = JSON.parse(localStorage.getItem("centurisk_user") || "{}");
+        const canWrite = !["MemberReadOnly", "PoolReadOnly", "CentuRiskAuditor"].includes(user.category);
+        const editBtn = (this._asOfDate || !canWrite) ? '' : '<button class="btn-edit" id="edit-btn">Edit Fields</button>';
+        const readOnlyNotice = canWrite ? '' : '<div style="background:#ebf4ff;color:#2b6cb0;padding:0.5rem 1rem;border-radius:4px;font-size:0.8125rem;margin-bottom:1rem;">You have read-only access. Editing is not available.</div>';
         const items = entries.map(([key, val]) => {
             const label = key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
             const cls = (key === "replacement_cost" || key === "contents_value") ? ' money' : '';
@@ -212,7 +215,7 @@ class CenturiskAssetDetail extends HTMLElement {
                 '</div><div class="field-value' + cls + '">' + this._esc(val) + '</div></div>';
         }).join("");
 
-        content.innerHTML = '<div class="card">' + editBtn + '<div class="field-grid">' + items + '</div></div>';
+        content.innerHTML = readOnlyNotice + '<div class="card">' + editBtn + '<div class="field-grid">' + items + '</div></div>';
 
         const eb = content.querySelector("#edit-btn");
         if (eb) eb.addEventListener("click", () => { this._editing = true; this._renderContent(); });
