@@ -1,13 +1,12 @@
 import { test, expect } from "@playwright/test";
 
-const ADMIN_ID = "00000000-0000-0000-0000-000000000001";
-
-/** Helper: set up a logged-in session via localStorage. */
-async function loginViaStorage(page, userId) {
-    const resp = await page.request.post("/api/login", {
-        data: { user_id: userId },
-    });
-    const { token, user } = await resp.json();
+/** Helper: login as a pool admin (has actual pool data). */
+async function loginViaStorage(page, request) {
+    const users = await (await request.get("/api/users")).json();
+    const poolAdmin = users.find(u => u.category === "PoolAdministrator" && u.display_name.includes("Demo"));
+    const { token, user } = await (await request.post("/api/login", {
+        data: { user_id: poolAdmin.user_id },
+    })).json();
 
     await page.goto("/");
     await page.evaluate(({ token, user }) => {
@@ -19,28 +18,26 @@ async function loginViaStorage(page, userId) {
 }
 
 test.describe("Asset CRUD", () => {
-    test("shows empty state when no assets exist", async ({ page }) => {
-        await loginViaStorage(page, ADMIN_ID);
+    test("shows imported assets from sample CSVs", async ({ page, request }) => {
+        await loginViaStorage(page, request);
 
         const app = page.locator("centurisk-app");
-        const nav = app.locator("centurisk-nav");
+        await app.locator("centurisk-nav").locator("button", { hasText: "Assets" }).click();
 
-        await nav.locator("button", { hasText: "Assets" }).click();
+        const table = app.locator("centurisk-asset-list table");
+        await expect(table).toBeAttached({ timeout: 5000 });
 
-        const assetList = app.locator("centurisk-asset-list");
-        await expect(assetList).toBeAttached();
-
-        const content = assetList.locator("#content");
-        await expect(content).toBeAttached();
+        // CentuRisk admin with default pool should see assets
+        const rows = table.locator("tbody tr");
+        const count = await rows.count();
+        expect(count).toBeGreaterThan(0);
     });
 
-    test("can create an asset and see it in the list", async ({ page }) => {
-        await loginViaStorage(page, ADMIN_ID);
+    test("can create an asset via the form", async ({ page, request }) => {
+        await loginViaStorage(page, request);
 
         const app = page.locator("centurisk-app");
-        const nav = app.locator("centurisk-nav");
-
-        await nav.locator("button", { hasText: "Assets" }).click();
+        await app.locator("centurisk-nav").locator("button", { hasText: "Assets" }).click();
 
         const addBtn = app.locator("button", { hasText: /Add/ }).first();
         await addBtn.click();
@@ -49,58 +46,32 @@ test.describe("Asset CRUD", () => {
         await expect(form).toBeAttached();
 
         await form.locator("select#asset-type").selectOption("Building");
-        await form.locator('input[name="building_name"]').fill("Fire Station #7");
-        await form.locator('input[name="address"]').fill("123 Main St");
-        await form.locator('input[name="replacement_cost"]').fill("1500000");
+        await form.locator('input[name="building_name"]').fill("New Test Building");
+        await form.locator('input[name="address"]').fill("999 Test Ave");
+        await form.locator('input[name="replacement_cost"]').fill("2000000");
 
         await form.locator('button[type="submit"]').click();
 
         await expect(app.locator(".page-title")).toHaveText("Assets");
-
         const table = app.locator("centurisk-asset-list table");
-        await expect(table).toBeAttached({ timeout: 5000 });
-
-        const rows = table.locator("tbody tr");
-        const count = await rows.count();
-        expect(count).toBeGreaterThanOrEqual(1);
-
-        // At least one row should contain our asset
-        await expect(table).toContainText("Fire Station #7");
+        await expect(table).toContainText("New Test Building");
     });
 
-    test("POST /api/assets creates an asset via API", async ({ request }) => {
-        const resp = await request.post("/api/assets", {
+    test("POST /api/onboard creates a new pool with assets from CSV", async ({ request }) => {
+        const resp = await request.post("/api/onboard", {
             data: {
-                asset_type: "Building",
-                fields: {
-                    building_name: "City Hall",
-                    address: "456 Oak Ave",
-                    replacement_cost: "5000000",
-                },
-            },
+                pool_name: "E2E Test Pool",
+                members: [{
+                    member_name: "Test Town",
+                    sov_csv: "asset_type,building_name,address,replacement_cost\nBuilding,Test Hall,1 Test St,500000\nVehicle,Test Truck,,75000"
+                }]
+            }
         });
 
         expect(resp.status()).toBe(201);
-
         const body = await resp.json();
-        expect(body.asset_type).toBe("Building");
-        expect(body.asset_id).toBeTruthy();
-        expect(body.fields.building_name).toBe("City Hall");
-    });
-
-    test("GET /api/assets returns created assets", async ({ request }) => {
-        await request.post("/api/assets", {
-            data: {
-                asset_type: "Vehicle",
-                fields: { building_name: "Engine 42" },
-            },
-        });
-
-        const resp = await request.get("/api/assets");
-        expect(resp.ok()).toBeTruthy();
-
-        const assets = await resp.json();
-        expect(Array.isArray(assets)).toBeTruthy();
-        expect(assets.length).toBeGreaterThanOrEqual(1);
+        expect(body.pool_name).toBe("E2E Test Pool");
+        expect(body.total_assets).toBe(2);
+        expect(body.members[0].assets_imported).toBe(2);
     });
 });

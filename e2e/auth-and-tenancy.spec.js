@@ -1,27 +1,26 @@
 import { test, expect } from "@playwright/test";
 
-// Deterministic user IDs from seed data
-const USERS = {
-    centuriskAdmin: "00000000-0000-0000-0000-000000000001",
-    poolAdminA:     "00000000-0000-0000-0000-000000000002",
-    memberA:        "00000000-0000-0000-0000-000000000003",
-    poolAdminB:     "00000000-0000-0000-0000-000000000004",
-    memberB:        "00000000-0000-0000-0000-000000000005",
-};
+/** Helper: find a user by category (and optionally display_name substring). */
+async function findUser(request, category, nameContains) {
+    const resp = await request.get("/api/users");
+    const users = await resp.json();
+    return users.find(u =>
+        u.category === category &&
+        (!nameContains || u.display_name.includes(nameContains))
+    );
+}
 
-/** Helper: login as a specific user and return the JWT token. */
+/** Helper: login and return { token, user }. */
 async function loginAs(request, userId) {
     const resp = await request.post("/api/login", {
         data: { user_id: userId },
     });
     expect(resp.ok()).toBeTruthy();
-    const body = await resp.json();
-    expect(body.token).toBeTruthy();
-    return body;
+    return await resp.json();
 }
 
 test.describe("Authentication", () => {
-    test("GET /api/users lists all seeded users", async ({ request }) => {
+    test("GET /api/users lists seeded users across roles", async ({ request }) => {
         const resp = await request.get("/api/users");
         expect(resp.ok()).toBeTruthy();
         const users = await resp.json();
@@ -34,9 +33,9 @@ test.describe("Authentication", () => {
     });
 
     test("POST /api/login returns JWT for valid user", async ({ request }) => {
-        const { token, user } = await loginAs(request, USERS.centuriskAdmin);
-        expect(token.split(".").length).toBe(3); // JWT has 3 parts
-        expect(user.display_name).toBe("Alice Admin");
+        const admin = await findUser(request, "CentuRiskAdmin");
+        const { token, user } = await loginAs(request, admin.user_id);
+        expect(token.split(".").length).toBe(3);
         expect(user.category).toBe("CentuRiskAdmin");
     });
 
@@ -48,7 +47,8 @@ test.describe("Authentication", () => {
     });
 
     test("GET /api/me with JWT returns authenticated user", async ({ request }) => {
-        const { token } = await loginAs(request, USERS.memberA);
+        const member = await findUser(request, "MemberUser", "Springfield");
+        const { token } = await loginAs(request, member.user_id);
 
         const resp = await request.get("/api/me", {
             headers: { Authorization: "Bearer " + token },
@@ -64,67 +64,65 @@ test.describe("Authentication", () => {
 
 test.describe("Cross-Tenant Isolation (PERMANENT CI FIXTURE)", () => {
     test("Pool A admin cannot see Pool B assets via API", async ({ request }) => {
-        const { token: tokenA } = await loginAs(request, USERS.poolAdminA);
-        const { token: tokenB } = await loginAs(request, USERS.poolAdminB);
+        // Find two pool admins from different pools
+        const resp = await request.get("/api/users");
+        const users = await resp.json();
+        const poolAdmins = users.filter(u => u.category === "PoolAdministrator");
+        expect(poolAdmins.length).toBeGreaterThanOrEqual(2);
 
-        // Create an asset as Pool B admin
-        const createResp = await request.post("/api/assets", {
+        const adminA = poolAdmins[0];
+        const adminB = poolAdmins[1];
+        expect(adminA.pool_id).not.toBe(adminB.pool_id);
+
+        const { token: tokenA } = await loginAs(request, adminA.user_id);
+        const { token: tokenB } = await loginAs(request, adminB.user_id);
+
+        // Get Pool B's assets
+        const assetsB = await (await request.get("/api/assets", {
             headers: { Authorization: "Bearer " + tokenB },
-            data: {
-                asset_type: "Building",
-                fields: { building_name: "Pool B Secret Building" },
-            },
-        });
-        expect(createResp.status()).toBe(201);
+        })).json();
+        expect(assetsB.length).toBeGreaterThan(0);
 
-        // Pool A admin should NOT see Pool B's asset
-        const listResp = await request.get("/api/assets", {
+        // Pool A should NOT see any of Pool B's assets
+        const assetsA = await (await request.get("/api/assets", {
             headers: { Authorization: "Bearer " + tokenA },
-        });
-        expect(listResp.ok()).toBeTruthy();
-        const assetsA = await listResp.json();
+        })).json();
 
-        const leaked = assetsA.find(a => a.fields?.building_name === "Pool B Secret Building");
-        expect(leaked).toBeUndefined();
+        const assetIdsB = new Set(assetsB.map(a => a.asset_id));
+        const leaked = assetsA.filter(a => assetIdsB.has(a.asset_id));
+        expect(leaked).toHaveLength(0);
     });
 
-    test("Member A cannot see Member B assets (different pool)", async ({ request }) => {
-        const { token: tokenA } = await loginAs(request, USERS.memberA);
-        const { token: tokenB } = await loginAs(request, USERS.memberB);
+    test("Member in Pool A cannot see Pool B member assets", async ({ request }) => {
+        const resp = await request.get("/api/users");
+        const users = await resp.json();
+        const members = users.filter(u => u.category === "MemberUser");
 
-        // Create an asset as Member B
-        await request.post("/api/assets", {
-            headers: { Authorization: "Bearer " + tokenB },
-            data: {
-                asset_type: "Vehicle",
-                fields: { building_name: "Member B Fire Truck" },
-            },
-        });
+        // Find two members from different pools
+        const memberA = members[0];
+        const memberB = members.find(u => u.pool_id !== memberA.pool_id);
+        expect(memberB).toBeTruthy();
 
-        // Member A should NOT see it
-        const listResp = await request.get("/api/assets", {
+        const { token: tokenA } = await loginAs(request, memberA.user_id);
+        const { token: tokenB } = await loginAs(request, memberB.user_id);
+
+        const assetsA = await (await request.get("/api/assets", {
             headers: { Authorization: "Bearer " + tokenA },
-        });
-        const assetsA = await listResp.json();
+        })).json();
 
-        const leaked = assetsA.find(a => a.fields?.building_name === "Member B Fire Truck");
-        expect(leaked).toBeUndefined();
-    });
+        const assetsB = await (await request.get("/api/assets", {
+            headers: { Authorization: "Bearer " + tokenB },
+        })).json();
 
-    test("CentuRisk admin sees assets across the default pool", async ({ request }) => {
-        const { token } = await loginAs(request, USERS.centuriskAdmin);
-
-        const resp = await request.get("/api/assets", {
-            headers: { Authorization: "Bearer " + token },
-        });
-        expect(resp.ok()).toBeTruthy();
-        // Admin sees pool A assets (their default pool)
+        // No overlap
+        const idsA = new Set(assetsA.map(a => a.asset_id));
+        const leaked = assetsB.filter(a => idsA.has(a.asset_id));
+        expect(leaked).toHaveLength(0);
     });
 });
 
 test.describe("Login UI Flow", () => {
     test("shows login page when no session", async ({ page }) => {
-        // Clear any existing session
         await page.goto("/");
         await page.evaluate(() => {
             localStorage.removeItem("centurisk_token");
@@ -133,16 +131,14 @@ test.describe("Login UI Flow", () => {
         });
         await page.reload();
 
-        // Login component should be visible
         const login = page.locator("centurisk-app").locator("centurisk-login");
         await expect(login).toBeAttached({ timeout: 5000 });
-
-        // User selector should have options
-        const select = login.locator("select#user-select");
-        await expect(select).toBeAttached();
     });
 
-    test("can log in and see the app with user info", async ({ page }) => {
+    test("can log in as pool admin and see assets", async ({ page, request }) => {
+        // Find a pool admin
+        const poolAdmin = await findUser(request, "PoolAdministrator", "Demo");
+
         await page.goto("/");
         await page.evaluate(() => {
             localStorage.removeItem("centurisk_token");
@@ -155,20 +151,23 @@ test.describe("Login UI Flow", () => {
         const login = app.locator("centurisk-login");
         await expect(login).toBeAttached({ timeout: 5000 });
 
-        // Wait for users to load, then select one
+        // Wait for user list to load then select
         const select = login.locator("select#user-select");
-        await page.waitForTimeout(500); // Wait for fetch to complete
-
-        await select.selectOption(USERS.poolAdminA);
-
-        // Click login
+        await page.waitForTimeout(500);
+        await select.selectOption(poolAdmin.user_id);
         await login.locator("#login-btn").click();
 
-        // After login, should see the app with sidebar
+        // Should see the app with nav
         await expect(app.locator("centurisk-nav")).toBeAttached({ timeout: 5000 });
 
-        // Should show user info with role badge
-        const userInfo = app.locator(".user-info");
-        await expect(userInfo).toContainText("Bob Pool-Admin");
+        // Navigate to assets and see imported data
+        await app.locator("centurisk-nav").locator("button", { hasText: "Assets" }).click();
+        const table = app.locator("centurisk-asset-list table");
+        await expect(table).toBeAttached({ timeout: 5000 });
+
+        // Should see Springfield + Shelbyville assets (Demo Risk Pool)
+        const rows = table.locator("tbody tr");
+        const count = await rows.count();
+        expect(count).toBeGreaterThanOrEqual(10); // 10 Springfield + 4 Shelbyville
     });
 });

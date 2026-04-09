@@ -1,7 +1,7 @@
 use axum::{Json, Router, extract::State, http::StatusCode, routing::get};
 use centurisk_core::asset::{AssetType, LifecycleState};
 use centurisk_core::field_value::FieldValue;
-use centurisk_core::ids::{AssetId, MemberId, MutationId};
+use centurisk_core::ids::{AssetId, MemberId, MutationId, PoolId};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -33,34 +33,45 @@ async fn list_assets(
     Auth(principal): Auth,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<AssetResponse>>, StatusCode> {
-    // Derive tenant context from principal
     let tenant = crate::auth::tenant_from_principal(&principal);
-
     let conn = state.db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let mut stmt = conn
-        .prepare(
+    // CentuRisk admins without a pool see all assets; scoped users see their pool only
+    let (query, pool_filter): (&str, Option<String>) = match &tenant {
+        Some(t) => (
             "SELECT a.asset_id, a.asset_type, a.lifecycle, fm.field_name, fm.value_json
              FROM assets a
              LEFT JOIN field_mutations fm ON fm.asset_id = a.asset_id AND fm.approval_state = 'Approved'
              WHERE a.pool_id = ?1
              ORDER BY a.created_at DESC, fm.field_name",
-        )
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            Some(t.pool_id.to_string()),
+        ),
+        None => (
+            "SELECT a.asset_id, a.asset_type, a.lifecycle, fm.field_name, fm.value_json
+             FROM assets a
+             LEFT JOIN field_mutations fm ON fm.asset_id = a.asset_id AND fm.approval_state = 'Approved'
+             ORDER BY a.created_at DESC, fm.field_name",
+            None,
+        ),
+    };
 
-    let rows: Vec<(String, String, String, Option<String>, Option<String>)> = stmt
-        .query_map(rusqlite::params![tenant.pool_id.to_string()], |row| {
-            Ok((
-                row.get(0)?,
-                row.get(1)?,
-                row.get(2)?,
-                row.get(3)?,
-                row.get(4)?,
-            ))
-        })
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .filter_map(|r| r.ok())
-        .collect();
+    type Row = (String, String, String, Option<String>, Option<String>);
+
+    let rows: Vec<Row> = if let Some(pid) = &pool_filter {
+        let mut stmt = conn.prepare(query).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let result: Vec<Row> = stmt.query_map(rusqlite::params![pid], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
+        }).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .filter_map(|r| r.ok()).collect();
+        result
+    } else {
+        let mut stmt = conn.prepare(query).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let result: Vec<Row> = stmt.query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
+        }).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .filter_map(|r| r.ok()).collect();
+        result
+    };
 
     // Group by asset_id
     let mut assets: HashMap<String, AssetResponse> = HashMap::new();
@@ -90,8 +101,6 @@ async fn create_asset(
     State(state): State<AppState>,
     Json(req): Json<CreateAssetRequest>,
 ) -> Result<(StatusCode, Json<AssetResponse>), (StatusCode, Json<ErrorResponse>)> {
-    let tenant = crate::auth::tenant_from_principal(&principal);
-
     let asset_type = match req.asset_type.as_str() {
         "Building" => AssetType::Building,
         "Contents" => AssetType::Contents,
@@ -105,20 +114,30 @@ async fn create_asset(
     let conn = state.db.get()
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "DB error".into() })))?;
 
-    // Resolve member_id: use principal's member_id, or look up first member in pool
+    // Resolve pool_id: from principal, or first pool in DB for admins
+    let pool_id = if let Some(pid) = principal.pool_id {
+        pid
+    } else {
+        let pid_str: String = conn
+            .query_row("SELECT pool_id FROM pools LIMIT 1", [], |row| row.get(0))
+            .map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "No pools exist".into() })))?;
+        PoolId::from_uuid(uuid::Uuid::parse_str(&pid_str).unwrap())
+    };
+
+    // Resolve member_id: from principal, or first member in the pool
     let member_id = if let Some(mid) = principal.member_id {
         mid
     } else {
         let mid_str: String = conn
             .query_row(
                 "SELECT member_id FROM members WHERE pool_id = ?1 LIMIT 1",
-                rusqlite::params![tenant.pool_id.to_string()],
+                rusqlite::params![pool_id.to_string()],
                 |row| row.get(0),
             )
             .map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "No member found in pool".into() })))?;
         MemberId::from_uuid(uuid::Uuid::parse_str(&mid_str).unwrap())
     };
-    let path = format!("/{}/{}/{}", tenant.pool_id, member_id, asset_id);
+    let path = format!("/{}/{}/{}", pool_id, member_id, asset_id);
 
     // Insert asset
     conn.execute(
@@ -126,7 +145,7 @@ async fn create_asset(
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         rusqlite::params![
             asset_id.to_string(),
-            tenant.pool_id.to_string(),
+            pool_id.to_string(),
             member_id.to_string(),
             path,
             format!("{:?}", asset_type),

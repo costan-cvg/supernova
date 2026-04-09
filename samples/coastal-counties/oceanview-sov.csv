@@ -1,0 +1,6 @@
+asset_type,building_name,address,city,state,zip_code,year_built,construction_class,occupancy,sq_footage,stories,replacement_cost,sprinkler,roof_type,contents_value
+Building,Oceanview City Hall,1 Harbor Way,Oceanview,CA,93001,1998,Fire Resistive,Office,28000,3,9500000,true,Flat,1200000
+Building,Beach Lifeguard HQ,500 Shoreline Dr,Oceanview,CA,93001,2010,Non-Combustible,Municipal,3200,1,1100000,true,Flat,180000
+Building,Wastewater Facility,2200 Industrial Pkwy,Oceanview,CA,93002,1988,Non-Combustible,Manufacturing,40000,1,11000000,false,Flat,3500000
+Vehicle,Marine Rescue Boat,500 Shoreline Dr,Oceanview,CA,93001,2022,,Municipal,,,420000,,,,
+Contents,Council Chambers AV Equipment,1 Harbor Way,Oceanview,CA,93001,,,Office,,,275000,,,,

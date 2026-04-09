@@ -132,22 +132,21 @@ fn claims_to_principal(claims: &Claims) -> Principal {
 }
 
 /// Derive a TenantContext from the authenticated principal.
-pub fn tenant_from_principal(principal: &Principal) -> TenantContext {
+/// For CentuRisk admins without a pool_id, returns None — caller should query all pools.
+pub fn tenant_from_principal(principal: &Principal) -> Option<TenantContext> {
     match principal.category {
         UserCategory::CentuRiskAdmin | UserCategory::CentuRiskAnalyst
         | UserCategory::CentuRiskAuditor | UserCategory::CentuRiskSupport => {
-            let pool_id = principal.pool_id.unwrap_or_else(|| {
-                PoolId::from_uuid(parse_uuid("00000000-0000-0000-0000-000000000010"))
-            });
-            TenantContext::pool_wide(pool_id)
+            // CentuRisk users may not have a pool_id — they see everything
+            principal.pool_id.map(TenantContext::pool_wide)
         }
         UserCategory::PoolAdministrator | UserCategory::PoolAnalyst | UserCategory::PoolReadOnly => {
-            TenantContext::pool_wide(principal.pool_id.expect("Pool users must have pool_id"))
+            Some(TenantContext::pool_wide(principal.pool_id.expect("Pool users must have pool_id")))
         }
         _ => {
             let pool_id = principal.pool_id.expect("Member users must have pool_id");
             let member_id = principal.member_id.expect("Member users must have member_id");
-            TenantContext::member_scoped(pool_id, member_id)
+            Some(TenantContext::member_scoped(pool_id, member_id))
         }
     }
 }

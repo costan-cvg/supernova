@@ -1,0 +1,5 @@
+asset_type,building_name,address,city,state,zip_code,year_built,construction_class,occupancy,sq_footage,stories,replacement_cost,sprinkler,roof_type,contents_value
+Building,Shelbyville Town Hall,100 Center St,Shelbyville,IL,62565,1955,Joisted Masonry,Office,12000,2,3200000,false,Gable,450000
+Building,Shelbyville Fire Dept,205 Maple Ave,Shelbyville,IL,62565,1990,Masonry,Fire Station,6000,1,1800000,true,Flat,280000
+Building,Parks Maintenance Barn,800 County Rd 4,Shelbyville,IL,62565,1972,Frame,Warehouse,4500,1,420000,false,Metal,85000
+Vehicle,Brush Truck #3,205 Maple Ave,Shelbyville,IL,62565,2020,,Fire Station,,,380000,,,,
