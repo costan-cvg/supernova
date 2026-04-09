@@ -84,6 +84,15 @@ struct SovRow {
     roof_type: String,
     #[serde(default)]
     contents_value: String,
+    /// Stable key to match rows across years for the same asset.
+    /// Rows sharing an asset_key become mutations on one asset.
+    /// If empty, each row creates a new asset.
+    #[serde(default)]
+    asset_key: String,
+    /// Effective date for this row's field values (e.g. "2024-01-01").
+    /// If empty, defaults to today.
+    #[serde(default)]
+    effective_date: String,
 }
 
 impl SovRow {
@@ -211,6 +220,10 @@ async fn onboard_pool(
         let mut assets_imported = 0;
         let mut errors = Vec::new();
 
+        // Track asset_key -> asset_id so multiple rows with the same key
+        // add historical mutations to the same asset instead of creating duplicates.
+        let mut key_to_asset: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+
         for (row_idx, result) in rdr.deserialize().enumerate() {
             let row: SovRow = match result {
                 Ok(r) => r,
@@ -226,21 +239,50 @@ async fn onboard_pool(
                 continue;
             }
 
-            let asset_id = AssetId::new();
-            let path = format!("/{}/{}/{}", pool_id, member_id, asset_id);
+            let effective = if row.effective_date.is_empty() { today.clone() } else { row.effective_date.clone() };
 
-            // Insert asset
-            if let Err(e) = conn.execute(
-                "INSERT INTO assets (asset_id, pool_id, member_id, path, asset_type, lifecycle, created_by)
-                 VALUES (?1, ?2, ?3, ?4, ?5, 'Active', ?6)",
-                rusqlite::params![
-                    asset_id.to_string(), pool_id.to_string(), member_id.to_string(),
-                    path, asset_type, actor_id.to_string(),
-                ],
-            ) {
-                errors.push(format!("Row {}: asset insert failed: {e}", row_idx + 2));
-                continue;
-            }
+            // Determine if this row creates a new asset or adds mutations to an existing one
+            let asset_id_str = if !row.asset_key.is_empty() {
+                if let Some(existing) = key_to_asset.get(&row.asset_key) {
+                    // Existing asset — just add mutations below
+                    existing.clone()
+                } else {
+                    // First row for this key — create the asset
+                    let asset_id = AssetId::new();
+                    let id_str = asset_id.to_string();
+                    let path = format!("/{}/{}/{}", pool_id, member_id, asset_id);
+
+                    if let Err(e) = conn.execute(
+                        "INSERT INTO assets (asset_id, pool_id, member_id, path, asset_type, lifecycle, created_by)
+                         VALUES (?1, ?2, ?3, ?4, ?5, 'Active', ?6)",
+                        rusqlite::params![&id_str, pool_id.to_string(), member_id.to_string(), path, asset_type, actor_id.to_string()],
+                    ) {
+                        errors.push(format!("Row {}: asset insert failed: {e}", row_idx + 2));
+                        continue;
+                    }
+                    key_to_asset.insert(row.asset_key.clone(), id_str.clone());
+                    assets_imported += 1;
+                    total_assets += 1;
+                    id_str
+                }
+            } else {
+                // No asset_key — every row creates a new asset (backward compatible)
+                let asset_id = AssetId::new();
+                let id_str = asset_id.to_string();
+                let path = format!("/{}/{}/{}", pool_id, member_id, asset_id);
+
+                if let Err(e) = conn.execute(
+                    "INSERT INTO assets (asset_id, pool_id, member_id, path, asset_type, lifecycle, created_by)
+                     VALUES (?1, ?2, ?3, ?4, ?5, 'Active', ?6)",
+                    rusqlite::params![&id_str, pool_id.to_string(), member_id.to_string(), path, asset_type, actor_id.to_string()],
+                ) {
+                    errors.push(format!("Row {}: asset insert failed: {e}", row_idx + 2));
+                    continue;
+                }
+                assets_imported += 1;
+                total_assets += 1;
+                id_str
+            };
 
             // Insert field mutations (all approved — this is onboarding data)
             let field_mutations = row.to_field_mutations();
@@ -252,16 +294,13 @@ async fn onboard_pool(
                     "INSERT INTO field_mutations (mutation_id, asset_id, field_name, value_json, effective_date, submitted_by, approval_state)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'Approved')",
                     rusqlite::params![
-                        mutation_id.to_string(), asset_id.to_string(),
-                        field_name, value_json, today, actor_id.to_string(),
+                        mutation_id.to_string(), &asset_id_str,
+                        field_name, value_json, &effective, actor_id.to_string(),
                     ],
                 ) {
                     errors.push(format!("Row {}: mutation insert for '{}' failed: {e}", row_idx + 2, field_name));
                 }
             }
-
-            assets_imported += 1;
-            total_assets += 1;
         }
 
         // Create a member user account

@@ -953,11 +953,21 @@ def write_samples(pool_data: dict, output_dir: str):
             writer.writerow([pool_name, m["member_name"], f"facilities@{slug}.gov"])
 
     # ── per-member SOV CSVs ───────────────────────────────────────────
+    # Two rows per asset: 2024 baseline + 2025 trended values.
+    # asset_key ties rows to the same asset; effective_date sets the period.
     SOV_COLUMNS = [
         "asset_type", "building_name", "address", "city", "state", "zip_code",
         "year_built", "construction_class", "occupancy", "sq_footage", "stories",
         "replacement_cost", "sprinkler", "roof_type", "contents_value",
+        "asset_key", "effective_date",
     ]
+
+    # Annual trend factors (applied to 2024 values to get 2025)
+    BUILDING_TREND = 1.04    # 4% increase in replacement cost
+    CONTENTS_TREND = 1.03    # 3% increase
+    VEHICLE_TREND = 0.92     # 8% depreciation
+    EQUIPMENT_TREND = 0.95   # 5% depreciation
+    PITO_TREND = 1.02        # 2% increase
 
     # Index assets by member code
     member_buildings = defaultdict(list)
@@ -989,11 +999,15 @@ def write_samples(pool_data: dict, output_dir: str):
             writer.writeheader()
 
             code = m["member_code"]
+            state_fallback = summary.get("state", "")
 
-            # Buildings
+            # Buildings — 2024 + 2025
             for b in member_buildings.get(code, []):
                 val = building_vals.get(b["asset_number"], {})
-                writer.writerow({
+                key = b["asset_number"]
+                rcn_2024 = val.get("replacement_cost_new", 0)
+                contents_2024 = val.get("modeled_contents_value", 0)
+                base = {
                     "asset_type": "Building",
                     "building_name": b.get("building_name", ""),
                     "address": b.get("address_1", ""),
@@ -1005,73 +1019,83 @@ def write_samples(pool_data: dict, output_dir: str):
                     "occupancy": b.get("occupancy", ""),
                     "sq_footage": b.get("total_sqft", ""),
                     "stories": b.get("number_of_stories", ""),
-                    "replacement_cost": int(val.get("replacement_cost_new", 0)),
                     "sprinkler": "true" if b.get("sprinklers") == "YES" else "false",
                     "roof_type": b.get("roofing_type_1", ""),
-                    "contents_value": int(val.get("modeled_contents_value", 0)),
+                    "asset_key": key,
+                }
+                # 2024 row
+                writer.writerow({**base,
+                    "replacement_cost": int(rcn_2024),
+                    "contents_value": int(contents_2024),
+                    "effective_date": "2024-01-01",
+                })
+                # 2025 row — trended valuations
+                writer.writerow({**base,
+                    "replacement_cost": int(rcn_2024 * BUILDING_TREND),
+                    "contents_value": int(contents_2024 * CONTENTS_TREND),
+                    "effective_date": "2025-01-01",
                 })
 
-            # Vehicles
+            # Licensed Vehicles — 2024 + 2025
             for v in member_vehicles.get(code, []):
                 val = vehicle_vals.get(v["asset_number"], {})
-                writer.writerow({
+                key = v["asset_number"]
+                rcn_2024 = val.get("replacement_cost_new", 0)
+                base = {
                     "asset_type": "LicensedVehicle",
                     "building_name": v.get("description", ""),
-                    "address": "",
-                    "city": "",
-                    "state": b.get("state", "") if member_buildings.get(code) else summary.get("state", ""),
-                    "zip_code": "",
+                    "state": state_fallback,
                     "year_built": v.get("model_year", ""),
-                    "construction_class": "",
-                    "occupancy": "",
-                    "sq_footage": "",
-                    "stories": "",
-                    "replacement_cost": int(val.get("replacement_cost_new", 0)),
-                    "sprinkler": "",
-                    "roof_type": "",
-                    "contents_value": "",
+                    "asset_key": key,
+                }
+                writer.writerow({**base,
+                    "replacement_cost": int(rcn_2024),
+                    "effective_date": "2024-01-01",
+                })
+                writer.writerow({**base,
+                    "replacement_cost": int(rcn_2024 * VEHICLE_TREND),
+                    "effective_date": "2025-01-01",
                 })
 
-            # Movable Equipment
+            # Movable Equipment — 2024 + 2025
             for e in member_equipment.get(code, []):
                 val = equipment_vals.get(e["asset_number"], {})
-                writer.writerow({
+                key = e["asset_number"]
+                rcn_2024 = val.get("replacement_cost_new", 0)
+                base = {
                     "asset_type": "MovableEquipment",
                     "building_name": e.get("description", ""),
-                    "address": "",
-                    "city": "",
-                    "state": "",
-                    "zip_code": "",
-                    "year_built": "",
-                    "construction_class": "",
                     "occupancy": e.get("class", ""),
-                    "sq_footage": "",
-                    "stories": "",
-                    "replacement_cost": int(val.get("replacement_cost_new", 0)),
-                    "sprinkler": "",
-                    "roof_type": "",
-                    "contents_value": "",
+                    "asset_key": key,
+                }
+                writer.writerow({**base,
+                    "replacement_cost": int(rcn_2024),
+                    "effective_date": "2024-01-01",
+                })
+                writer.writerow({**base,
+                    "replacement_cost": int(rcn_2024 * EQUIPMENT_TREND),
+                    "effective_date": "2025-01-01",
                 })
 
-            # Property in the Open
+            # Property in the Open — 2024 + 2025
             for p in member_pito.get(code, []):
                 val = pito_vals.get(p["asset_number"], {})
-                writer.writerow({
+                key = p["asset_number"]
+                rcn_2024 = val.get("replacement_cost_new", 0)
+                base = {
                     "asset_type": "PropertyInTheOpen",
                     "building_name": p.get("description", ""),
-                    "address": "",
-                    "city": "",
-                    "state": "",
-                    "zip_code": "",
                     "year_built": str(p.get("construction_year", "")),
-                    "construction_class": "",
                     "occupancy": p.get("class", ""),
-                    "sq_footage": "",
-                    "stories": "",
-                    "replacement_cost": int(val.get("replacement_cost_new", 0)),
-                    "sprinkler": "",
-                    "roof_type": "",
-                    "contents_value": "",
+                    "asset_key": key,
+                }
+                writer.writerow({**base,
+                    "replacement_cost": int(rcn_2024),
+                    "effective_date": "2024-01-01",
+                })
+                writer.writerow({**base,
+                    "replacement_cost": int(rcn_2024 * PITO_TREND),
+                    "effective_date": "2025-01-01",
                 })
 
     # Also write summary.json for reference
