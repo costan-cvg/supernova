@@ -154,7 +154,7 @@ class CenturiskAssetDetail extends HTMLElement {
             const fetches = [
                 fetch("/api/assets/" + this._assetId),
                 fetch("/api/assets/" + this._assetId + "/mutations"),
-                fetch("/api/assets/" + this._assetId + "/quality"),
+                fetch("/api/quality/asset/" + this._assetId"),
             ];
             // If as-of date selected, also fetch historical state
             if (this._asOfDate) {

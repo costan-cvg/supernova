@@ -6,6 +6,7 @@ import "./approval-queue.js";
 import "./dashboard.js";
 import "./renewal-page.js";
 import "./search-bar.js";
+import "./quality-dashboard.js";
 import "./login-page.js";
 
 const PAGE_TITLES = {
@@ -408,6 +409,10 @@ class CenturiskApp extends HTMLElement {
             case "assets":
                 content.innerHTML = "";
                 content.appendChild(document.createElement("centurisk-asset-list"));
+                break;
+            case "quality":
+                content.innerHTML = "";
+                content.appendChild(document.createElement("centurisk-quality-dashboard"));
                 break;
             case "asset-create":
                 content.innerHTML = "";

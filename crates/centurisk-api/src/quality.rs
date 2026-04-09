@@ -239,6 +239,6 @@ fn parse_date(s: &str) -> Option<time::Date> {
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/api/assets/:id/quality", get(asset_quality))
+        .route("/api/quality/asset/:id", get(asset_quality))
         .route("/api/quality/summary", get(quality_summary))
 }
