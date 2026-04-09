@@ -42,9 +42,15 @@ async fn tiv_aggregation(
 ) -> Result<Json<TivSummary>, StatusCode> {
     let conn = state.db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let (tenant_clause, tenant_params) = tenant_where(&principal);
-    let group_by = params.group_by.as_deref().unwrap_or("city");
+    // Whitelist allowed group_by values to prevent SQL injection
+    let group_by = match params.group_by.as_deref().unwrap_or("city") {
+        "city" | "state" | "zip_code" | "construction_class" | "occupancy" | "asset_type" => {
+            params.group_by.as_deref().unwrap_or("city")
+        }
+        _ => "city",
+    };
 
-    // Get all assets with their replacement_cost and the grouping field
+    // Inject field name directly (safe — whitelisted above)
     let query = format!(
         "SELECT a.asset_id, a.asset_type,
                 (SELECT fm.value_json FROM field_mutations fm
@@ -52,15 +58,14 @@ async fn tiv_aggregation(
                    AND fm.approval_state = 'Approved'
                  ORDER BY fm.effective_date DESC LIMIT 1) as cost_json,
                 (SELECT fm.value_json FROM field_mutations fm
-                 WHERE fm.asset_id = a.asset_id AND fm.field_name = ?1
+                 WHERE fm.asset_id = a.asset_id AND fm.field_name = '{group_by}'
                    AND fm.approval_state = 'Approved'
                  ORDER BY fm.effective_date DESC LIMIT 1) as group_json
          FROM assets a
          WHERE {tenant_clause}"
     );
 
-    let mut all_params: Vec<String> = vec![group_by.to_string()];
-    all_params.extend(tenant_params);
+    let all_params = tenant_params;
 
     let mut stmt = conn.prepare(&query).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     type Row = (String, String, Option<String>, Option<String>);
