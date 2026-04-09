@@ -7,5 +7,6 @@ edition = "2021"
 
 [dependencies]
 centurisk-core = { path = "../centurisk-core" }
+csv = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }

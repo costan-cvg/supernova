@@ -366,6 +366,7 @@ dependencies = [
  "centurisk-auth",
  "centurisk-core",
  "centurisk-db",
+ "centurisk-export",
  "csv",
  "http",
  "jsonwebtoken",
@@ -432,6 +433,7 @@ name = "centurisk-export"
 version = "0.1.0"
 dependencies = [
  "centurisk-core",
+ "csv",
  "serde",
  "thiserror 1.0.69",
 ]

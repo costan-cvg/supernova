@@ -57,13 +57,36 @@ async fn asset_quality(
         }
     }
 
-    // Completeness
-    let comp_config = match asset_type.as_str() {
+    // Completeness: merge built-in + custom field definitions
+    let mut comp_config = match asset_type.as_str() {
         "Building" => quality::building_completeness_config(),
         "Vehicle" => quality::vehicle_completeness_config(),
         "Contents" => quality::contents_completeness_config(),
         _ => quality::building_completeness_config(),
     };
+
+    // Resolve pool_id for loading custom fields
+    let pool_id_str: String = conn
+        .query_row(
+            &format!("SELECT a.pool_id FROM assets a WHERE {tenant_clause} AND a.asset_id = ?{aid_idx}"),
+            rusqlite::params_from_iter(&check_params),
+            |row| row.get(0),
+        )
+        .unwrap_or_default();
+
+    if !pool_id_str.is_empty() {
+        let custom_defs = crate::custom_fields::load_custom_fields_for_pool(&conn, &pool_id_str);
+        for cf in &custom_defs {
+            if cf.asset_types.contains(&asset_type) {
+                if cf.required {
+                    comp_config.required.push(cf.field_name.clone());
+                } else if cf.recommended {
+                    comp_config.recommended.push(cf.field_name.clone());
+                }
+            }
+        }
+    }
+
     let completeness = quality::score_completeness(&fields, &comp_config);
 
     // Accuracy
@@ -139,13 +162,35 @@ async fn quality_summary(
         }
     }
 
+    // Load custom field definitions for this pool (once, outside the loop)
+    let pool_id_str = crate::auth::tenant_from_principal(&principal)
+        .map(|t| t.pool_id.to_string())
+        .unwrap_or_default();
+    let custom_defs = if !pool_id_str.is_empty() {
+        crate::custom_fields::load_custom_fields_for_pool(&conn, &pool_id_str)
+    } else {
+        Vec::new()
+    };
+
     let mut results: Vec<AssetQualitySummary> = assets.into_iter().map(|(asset_id, (asset_type, fields))| {
-        let comp_config = match asset_type.as_str() {
+        let mut comp_config = match asset_type.as_str() {
             "Building" => quality::building_completeness_config(),
             "Vehicle" => quality::vehicle_completeness_config(),
             "Contents" => quality::contents_completeness_config(),
             _ => quality::building_completeness_config(),
         };
+
+        // Extend with custom field definitions applicable to this asset type
+        for cf in &custom_defs {
+            if cf.asset_types.contains(&asset_type) {
+                if cf.required {
+                    comp_config.required.push(cf.field_name.clone());
+                } else if cf.recommended {
+                    comp_config.recommended.push(cf.field_name.clone());
+                }
+            }
+        }
+
         let completeness = quality::score_completeness(&fields, &comp_config);
         let accuracy = quality::score_accuracy(&fields, &quality::default_accuracy_rules());
         let composite = completeness.score * 0.5 + accuracy.score * 0.5;

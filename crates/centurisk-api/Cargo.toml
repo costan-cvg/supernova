@@ -9,6 +9,7 @@ edition = "2021"
 centurisk-core = { path = "../centurisk-core" }
 centurisk-auth = { path = "../centurisk-auth" }
 centurisk-db = { path = "../centurisk-db" }
+centurisk-export = { path = "../centurisk-export" }
 axum = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }

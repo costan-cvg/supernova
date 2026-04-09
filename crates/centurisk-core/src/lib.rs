@@ -5,3 +5,5 @@ pub mod quality;
 pub mod sov;
 pub mod audit;
 pub mod expr;
+pub mod loss_event;
+pub mod recommendation;
