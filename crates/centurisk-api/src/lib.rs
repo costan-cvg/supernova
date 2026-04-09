@@ -10,6 +10,7 @@ pub mod onboard;
 pub mod quality;
 pub mod recommendations;
 pub mod renewals;
+pub mod search;
 
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
@@ -38,6 +39,7 @@ pub fn app(state: AppState) -> Router {
         .merge(notifications::routes())
         .merge(export::routes())
         .merge(custom_fields::routes())
+        .merge(search::routes())
         .route("/api/me", get(auth::me))
         .layer(DefaultBodyLimit::max(10 * 1024 * 1024))
         .with_state(state)

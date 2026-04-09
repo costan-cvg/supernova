@@ -367,6 +367,7 @@ dependencies = [
  "centurisk-core",
  "centurisk-db",
  "centurisk-export",
+ "centurisk-search",
  "csv",
  "http",
  "jsonwebtoken",
@@ -476,8 +477,11 @@ name = "centurisk-search"
 version = "0.1.0"
 dependencies = [
  "centurisk-core",
+ "rusqlite",
  "serde",
+ "serde_json",
  "thiserror 1.0.69",
+ "tracing",
 ]
 
 [[package]]

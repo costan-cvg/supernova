@@ -3,9 +3,12 @@ name = "centurisk-search"
 version = "0.1.0"
 edition = "2021"
 
-# Search index + NL query layer (after Spike 2)
+# Search index (FTS5) + NL query translation layer
 
 [dependencies]
 centurisk-core = { path = "../centurisk-core" }
+rusqlite = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }

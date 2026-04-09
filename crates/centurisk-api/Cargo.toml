@@ -10,6 +10,7 @@ centurisk-core = { path = "../centurisk-core" }
 centurisk-auth = { path = "../centurisk-auth" }
 centurisk-db = { path = "../centurisk-db" }
 centurisk-export = { path = "../centurisk-export" }
+centurisk-search = { path = "../centurisk-search" }
 axum = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }

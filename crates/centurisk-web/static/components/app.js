@@ -5,6 +5,7 @@ import "./asset-detail.js";
 import "./approval-queue.js";
 import "./dashboard.js";
 import "./renewal-page.js";
+import "./search-bar.js";
 import "./login-page.js";
 
 const PAGE_TITLES = {
@@ -348,7 +349,7 @@ class CenturiskApp extends HTMLElement {
             '    </div>' +
             '  </header>' +
             '  <div class="content" id="content">' +
-            '    <centurisk-dashboard></centurisk-dashboard>' +
+            '    <centurisk-search-bar></centurisk-search-bar><centurisk-dashboard></centurisk-dashboard>' +
             '  </div>' +
             '</div>';
 
@@ -401,6 +402,7 @@ class CenturiskApp extends HTMLElement {
         switch (id) {
             case "dashboard":
                 content.innerHTML = "";
+                content.appendChild(document.createElement("centurisk-search-bar"));
                 content.appendChild(document.createElement("centurisk-dashboard"));
                 break;
             case "assets":
