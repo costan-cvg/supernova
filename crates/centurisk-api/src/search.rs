@@ -48,9 +48,35 @@ async fn search(
         SearchIndex::search(&conn, text, pool_id.as_deref(), limit)
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     } else if nl_query.asset_type.is_some() || !nl_query.numeric_filters.is_empty() {
-        // No text but have filters — search for everything then filter
-        SearchIndex::search(&conn, "*", pool_id.as_deref(), limit * 5)
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        // No text but have type/numeric filters — query all assets from the DB directly
+        let pool_clause = pool_id.as_ref()
+            .map(|_| "WHERE a.pool_id = ?1".to_string())
+            .unwrap_or_default();
+        let mut stmt = conn.prepare(&format!(
+            "SELECT a.asset_id, a.asset_type FROM assets a {pool_clause} LIMIT ?{}",
+            if pool_id.is_some() { "2" } else { "1" }
+        )).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        let all: Vec<centurisk_search::fts::SearchResult> = if let Some(ref pid) = pool_id {
+            stmt.query_map(rusqlite::params![pid, (limit * 5) as i64], |row| {
+                Ok(centurisk_search::fts::SearchResult {
+                    asset_id: row.get(0)?, asset_type: row.get(1)?,
+                    rank: 0.0, snippet: String::new(),
+                    fields: std::collections::HashMap::new(),
+                })
+            }).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .filter_map(|r| r.ok()).collect()
+        } else {
+            stmt.query_map(rusqlite::params![(limit * 5) as i64], |row| {
+                Ok(centurisk_search::fts::SearchResult {
+                    asset_id: row.get(0)?, asset_type: row.get(1)?,
+                    rank: 0.0, snippet: String::new(),
+                    fields: std::collections::HashMap::new(),
+                })
+            }).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .filter_map(|r| r.ok()).collect()
+        };
+        all
     } else {
         vec![]
     };
