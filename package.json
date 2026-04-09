@@ -1,0 +1,25 @@
+{
+  "name": "supernova",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test:e2e": "npx playwright test",
+    "test:e2e:headed": "npx playwright test --headed",
+    "test:e2e:ui": "npx playwright test --ui"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/costan-cvg/supernova.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/costan-cvg/supernova/issues"
+  },
+  "homepage": "https://github.com/costan-cvg/supernova#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.59.1"
+  }
+}

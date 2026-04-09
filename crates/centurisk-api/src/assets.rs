@@ -101,12 +101,24 @@ async fn create_asset(
     };
 
     let asset_id = AssetId::new();
-    // For now, use the principal's member_id or create a default path
-    let member_id = principal.member_id.unwrap_or_else(MemberId::new);
-    let path = format!("/{}/{}/{}", tenant.pool_id, member_id, asset_id);
 
     let conn = state.db.get()
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "DB error".into() })))?;
+
+    // Resolve member_id: use principal's member_id, or look up first member in pool
+    let member_id = if let Some(mid) = principal.member_id {
+        mid
+    } else {
+        let mid_str: String = conn
+            .query_row(
+                "SELECT member_id FROM members WHERE pool_id = ?1 LIMIT 1",
+                rusqlite::params![tenant.pool_id.to_string()],
+                |row| row.get(0),
+            )
+            .map_err(|_| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "No member found in pool".into() })))?;
+        MemberId::from_uuid(uuid::Uuid::parse_str(&mid_str).unwrap())
+    };
+    let path = format!("/{}/{}/{}", tenant.pool_id, member_id, asset_id);
 
     // Insert asset
     conn.execute(
