@@ -20,8 +20,7 @@ echo "Server: $BASE_URL"
 echo ""
 
 for pool_dir in "$SAMPLES_DIR"/*/; do
-    pool_csv="$pool_dir/pool.csv"
-    [ -f "$pool_csv" ] || continue
+    [ -f "$pool_dir/pool.csv" ] || continue
 
     # Use python to build the JSON request body and POST it
     python3 - "$pool_dir" "$BASE_URL" <<'PYEOF'

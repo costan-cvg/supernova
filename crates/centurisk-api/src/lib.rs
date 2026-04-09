@@ -6,6 +6,7 @@ pub mod onboard;
 pub mod quality;
 
 use axum::Router;
+use axum::extract::DefaultBodyLimit;
 use axum::routing::get;
 use centurisk_auth::PolicyGate;
 use centurisk_db::DbPool;
@@ -26,5 +27,6 @@ pub fn app(state: AppState) -> Router {
         .merge(quality::routes())
         .merge(approvals::routes())
         .route("/api/me", get(auth::me))
+        .layer(DefaultBodyLimit::max(10 * 1024 * 1024)) // 10MB for CSV imports
         .with_state(state)
 }
