@@ -30,11 +30,15 @@ fn init_tracing() {
     let honeycomb_key = std::env::var("HONEYCOMB_API_KEY").ok();
 
     if let Some(api_key) = honeycomb_key {
-        let dataset = std::env::var("HONEYCOMB_DATASET").unwrap_or_else(|_| "riskstar".into());
-
-        // Set OTLP env vars for the exporter (Honeycomb accepts OTLP/gRPC)
+        // Honeycomb OTLP configuration via standard env vars.
+        // The SDK reads these automatically — no need to pass them programmatically.
+        // Dataset is determined by OTEL_SERVICE_NAME in modern Honeycomb (Environments & Services).
+        // x-honeycomb-dataset header is only needed for Classic keys.
         std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "https://api.honeycomb.io");
-        std::env::set_var("OTEL_EXPORTER_OTLP_HEADERS", format!("x-honeycomb-team={api_key},x-honeycomb-dataset={dataset}"));
+        std::env::set_var(
+            "OTEL_EXPORTER_OTLP_HEADERS",
+            format!("x-honeycomb-team={api_key}"),
+        );
         std::env::set_var("OTEL_SERVICE_NAME", "riskstar");
 
         let exporter = opentelemetry_otlp::SpanExporter::builder()
@@ -51,8 +55,11 @@ fn init_tracing() {
             )
             .build();
 
+        // Register globally so traces flush on shutdown
         use opentelemetry::trace::TracerProvider;
         let tracer = tracer_provider.tracer("riskstar");
+        opentelemetry::global::set_tracer_provider(tracer_provider);
+
         let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
 
         tracing_subscriber::registry()
@@ -61,8 +68,9 @@ fn init_tracing() {
             .with(otel_layer)
             .init();
 
-        tracing::info!(honeycomb.dataset = %dataset, "OpenTelemetry exporting to Honeycomb");
+        tracing::info!("OpenTelemetry exporting to Honeycomb (service: riskstar)");
     } else {
+        // Local-only: structured JSON logging to stdout
         tracing_subscriber::registry()
             .with(env_filter)
             .with(fmt_layer)
