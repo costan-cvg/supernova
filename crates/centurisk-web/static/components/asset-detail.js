@@ -166,7 +166,13 @@ class CenturiskAssetDetail extends HTMLElement {
 
             this._currentAsset = await responses[0].json();
             this._mutations = responses[1].ok ? await responses[1].json() : [];
-            this._quality = responses[2].ok ? await responses[2].json() : null;
+            if (responses[2].ok) {
+                try { this._quality = await responses[2].json(); }
+                catch (parseErr) { console.error("Quality JSON parse failed:", parseErr); this._quality = null; }
+            } else {
+                console.warn("Quality endpoint returned", responses[2].status);
+                this._quality = null;
+            }
 
             if (this._asOfDate && responses[3] && responses[3].ok) {
                 this._asOfAsset = await responses[3].json();
