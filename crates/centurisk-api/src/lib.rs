@@ -1,7 +1,15 @@
 pub mod health;
 
 use axum::Router;
+use centurisk_db::DbPool;
 
-pub fn app() -> Router {
-    Router::new().merge(health::routes())
+#[derive(Clone)]
+pub struct AppState {
+    pub db: DbPool,
+}
+
+pub fn app(state: AppState) -> Router {
+    Router::new()
+        .merge(health::routes())
+        .with_state(state)
 }
