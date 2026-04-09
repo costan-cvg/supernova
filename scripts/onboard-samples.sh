@@ -68,19 +68,33 @@ try:
                 print(f"      ERROR: {e}")
 except urllib.error.HTTPError as e:
     print(f"  ERROR: {e.code} {e.read().decode()}")
+except Exception as e:
+    print(f"  ERROR: {e}")
 PYEOF
 
+    sleep 0.5
 done
 
 echo ""
 echo "=== Onboarding complete ==="
 echo ""
 echo "Users:"
-curl -sf "$BASE_URL/api/users" | python3 -c "
-import json, sys
-users = json.load(sys.stdin)
-for u in users:
-    pool = (u.get('pool_id') or '—')[:8]
-    print(f\"  {u['display_name']:30} {u['category']:20} pool={pool}\")
-print(f'Total: {len(users)} users')
+sleep 0.5
+python3 -c "
+import json, urllib.request, sys, time
+
+for attempt in range(3):
+    try:
+        with urllib.request.urlopen('$BASE_URL/api/users') as resp:
+            users = json.loads(resp.read())
+            for u in users:
+                pool = (u.get('pool_id') or '\u2014')[:8]
+                print(f'  {u[\"display_name\"]:30} {u[\"category\"]:20} pool={pool}')
+            print(f'Total: {len(users)} users')
+            break
+    except Exception as e:
+        if attempt < 2:
+            time.sleep(1)
+        else:
+            print(f'  Could not fetch users: {e}')
 "
