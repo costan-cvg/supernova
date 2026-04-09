@@ -70,7 +70,7 @@ struct ErrorResponse {
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 /// Build a WHERE clause from the principal's tenant scope.
-fn tenant_where(principal: &centurisk_auth::Principal) -> (String, Vec<String>) {
+pub fn tenant_where(principal: &centurisk_auth::Principal) -> (String, Vec<String>) {
     let tenant = crate::auth::tenant_from_principal(principal);
     match tenant {
         Some(t) => {

@@ -2,6 +2,7 @@ pub mod auth;
 pub mod assets;
 pub mod health;
 pub mod onboard;
+pub mod quality;
 
 use axum::Router;
 use axum::routing::get;
@@ -21,6 +22,7 @@ pub fn app(state: AppState) -> Router {
         .merge(assets::routes())
         .merge(auth::routes())
         .merge(onboard::routes())
+        .merge(quality::routes())
         .route("/api/me", get(auth::me))
         .with_state(state)
 }

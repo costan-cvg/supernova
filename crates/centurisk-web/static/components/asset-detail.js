@@ -59,6 +59,19 @@ template.innerHTML = `
     .empty { text-align: center; padding: 2rem; color: var(--color-text-muted, #718096); }
     .loading { text-align: center; padding: 2rem; color: var(--color-text-muted, #718096); }
     .success { color: #276749; font-size: 0.8125rem; margin-top: 0.5rem; }
+
+    .quality-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+    .quality-card { background: #fff; border-radius: 6px; padding: 1.25rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); text-align: center; }
+    .quality-card h3 { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-muted, #718096); margin: 0 0 0.5rem; }
+    .score-value { font-size: 2rem; font-weight: 700; }
+    .score-green { color: #276749; }
+    .score-yellow { color: #975a16; }
+    .score-red { color: #9b2c2c; }
+    .score-label { font-size: 0.75rem; color: var(--color-text-muted, #718096); margin-top: 0.25rem; }
+    .gap-list { margin-top: 1rem; }
+    .gap-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.375rem 0; font-size: 0.8125rem; border-bottom: 1px solid var(--color-border, #e2e8f0); }
+    .gap-icon { color: #e53e3e; font-weight: 700; }
+    .gap-warn { color: #d69e2e; font-weight: 700; }
 </style>
 <div class="header">
     <button class="back-btn" id="back-btn">&larr; Back</button>
@@ -67,6 +80,7 @@ template.innerHTML = `
 <div class="toolbar">
     <div class="tabs">
         <button class="tab active" data-tab="fields">Fields</button>
+        <button class="tab" data-tab="quality">Quality</button>
         <button class="tab" data-tab="history">History</button>
     </div>
     <div class="as-of-bar">
@@ -86,6 +100,7 @@ class CenturiskAssetDetail extends HTMLElement {
         this.shadowRoot.appendChild(template.content.cloneNode(true));
         this._asset = null;
         this._mutations = [];
+        this._quality = null;
         this._activeTab = "fields";
         this._editing = false;
         this._asOfDate = null;
@@ -124,13 +139,15 @@ class CenturiskAssetDetail extends HTMLElement {
             let url = "/api/assets/" + this._assetId;
             if (this._asOfDate) url += "?as_of=" + this._asOfDate;
 
-            const [assetResp, mutResp] = await Promise.all([
+            const [assetResp, mutResp, qualResp] = await Promise.all([
                 fetch(url),
                 fetch("/api/assets/" + this._assetId + "/mutations"),
+                fetch("/api/assets/" + this._assetId + "/quality"),
             ]);
             if (!assetResp.ok) throw new Error("Asset not found");
             this._asset = await assetResp.json();
             this._mutations = mutResp.ok ? await mutResp.json() : [];
+            this._quality = qualResp.ok ? await qualResp.json() : null;
         } catch (e) {
             this._asset = null;
             this._mutations = [];
@@ -167,6 +184,7 @@ class CenturiskAssetDetail extends HTMLElement {
         const content = this.shadowRoot.getElementById("content");
         if (!this._asset) { content.innerHTML = '<div class="empty">Asset not found.</div>'; return; }
         if (this._activeTab === "fields") this._renderFields(content);
+        else if (this._activeTab === "quality") this._renderQuality(content);
         else this._renderHistory(content);
     }
 
@@ -259,6 +277,52 @@ class CenturiskAssetDetail extends HTMLElement {
                 msg.textContent = "Error: " + e.message;
             }
         });
+    }
+
+    _renderQuality(content) {
+        if (!this._quality) {
+            content.innerHTML = '<div class="card"><div class="empty">Quality data unavailable.</div></div>';
+            return;
+        }
+        const q = this._quality;
+
+        const scoreColor = (s) => s >= 0.8 ? "score-green" : s >= 0.5 ? "score-yellow" : "score-red";
+        const pct = (s) => Math.round(s * 100) + "%";
+
+        let html = '<div class="quality-grid">';
+        html += '<div class="quality-card"><h3>Completeness</h3><div class="score-value ' + scoreColor(q.completeness.score) + '">' + pct(q.completeness.score) + '</div>';
+        html += '<div class="score-label">' + q.completeness.required_populated + '/' + q.completeness.required_total + ' required, ' + q.completeness.recommended_populated + '/' + q.completeness.recommended_total + ' recommended</div></div>';
+        html += '<div class="quality-card"><h3>Accuracy</h3><div class="score-value ' + scoreColor(q.accuracy.score) + '">' + pct(q.accuracy.score) + '</div>';
+        html += '<div class="score-label">' + q.accuracy.rules_passed + '/' + q.accuracy.rules_evaluated + ' rules passed</div></div>';
+        html += '<div class="quality-card"><h3>Recency</h3><div class="score-value ' + scoreColor(q.recency.score) + '">' + pct(q.recency.score) + '</div>';
+        const staleCount = q.recency.tracked_fields.filter(f => f.is_stale).length;
+        html += '<div class="score-label">' + staleCount + ' of ' + q.recency.tracked_fields.length + ' tracked fields stale</div></div>';
+        html += '</div>';
+
+        // Composite
+        html += '<div class="card" style="margin-bottom:1rem;"><strong>Composite Score: </strong><span class="' + scoreColor(q.composite) + '" style="font-size:1.125rem;font-weight:700;">' + pct(q.composite) + '</span></div>';
+
+        // Gaps
+        const gaps = [];
+        for (const f of q.completeness.missing_required) {
+            gaps.push('<div class="gap-item"><span class="gap-icon">\u2717</span> Missing required: <strong>' + this._esc(f.replace(/_/g, " ")) + '</strong></div>');
+        }
+        for (const f of q.completeness.missing_recommended) {
+            gaps.push('<div class="gap-item"><span class="gap-warn">\u26A0</span> Missing recommended: ' + this._esc(f.replace(/_/g, " ")) + '</div>');
+        }
+        for (const f of q.accuracy.failures) {
+            gaps.push('<div class="gap-item"><span class="gap-icon">\u2717</span> ' + this._esc(f.description) + '</div>');
+        }
+        for (const f of q.recency.tracked_fields.filter(f => f.is_stale)) {
+            const days = f.days_since_update !== null ? f.days_since_update + " days old" : "never updated";
+            gaps.push('<div class="gap-item"><span class="gap-warn">\u26A0</span> Stale: ' + this._esc(f.field_name.replace(/_/g, " ")) + ' (' + days + ', threshold: ' + f.threshold_days + ' days)</div>');
+        }
+
+        if (gaps.length > 0) {
+            html += '<div class="card"><h3 style="font-size:0.875rem;font-weight:600;margin:0 0 0.75rem;">Data Gaps</h3><div class="gap-list">' + gaps.join("") + '</div></div>';
+        }
+
+        content.innerHTML = html;
     }
 
     _renderHistory(content) {
