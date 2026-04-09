@@ -110,11 +110,11 @@ impl FromRequestParts<AppState> for Auth {
             }
         }
 
-        // No token — fall back to hardcoded admin (preserves backward compat)
+        // No token — fall back to CentuRisk admin with no pool scope (sees all pools)
         Ok(Auth(Principal {
             actor_id: ActorId::from_uuid(parse_uuid("00000000-0000-0000-0000-000000000001")),
             category: UserCategory::CentuRiskAdmin,
-            pool_id: Some(PoolId::from_uuid(parse_uuid("00000000-0000-0000-0000-000000000010"))),
+            pool_id: None,
             member_id: None,
             profile_ids: vec!["centurisk-admin".into()],
         }))
