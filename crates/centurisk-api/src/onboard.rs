@@ -265,6 +265,20 @@ async fn onboard_pool(
             total_assets += 1;
         }
 
+        // Create a member user account
+        let member_user_id = ActorId::new();
+        let email_slug = member_req.member_name.to_lowercase().replace(' ', "-").replace("of-", "");
+        let _ = conn.execute(
+            "INSERT INTO users (user_id, email, display_name, category, pool_id, member_id) VALUES (?1, ?2, ?3, 'MemberUser', ?4, ?5)",
+            rusqlite::params![
+                member_user_id.to_string(),
+                format!("facilities@{email_slug}.gov"),
+                format!("{} User", member_req.member_name),
+                pool_id.to_string(),
+                member_id.to_string(),
+            ],
+        );
+
         member_results.push(MemberImportResult {
             member_id: member_id.to_string(),
             member_name: member_req.member_name.clone(),
@@ -272,6 +286,19 @@ async fn onboard_pool(
             errors,
         });
     }
+
+    // Create a pool admin user
+    let pool_admin_id = ActorId::new();
+    let pool_slug = req.pool_name.to_lowercase().replace(' ', "-");
+    let _ = conn.execute(
+        "INSERT INTO users (user_id, email, display_name, category, pool_id, member_id) VALUES (?1, ?2, ?3, 'PoolAdministrator', ?4, NULL)",
+        rusqlite::params![
+            pool_admin_id.to_string(),
+            format!("admin@{pool_slug}.dev"),
+            format!("{} Admin", req.pool_name),
+            pool_id.to_string(),
+        ],
+    );
 
     let result = OnboardResult {
         pool_id: pool_id.to_string(),
@@ -282,196 +309,6 @@ async fn onboard_pool(
     };
 
     Ok((StatusCode::CREATED, Json(result)))
-}
-
-/// Onboard from sample files on disk. Called at server startup if DB is empty.
-pub fn onboard_from_samples(db: &crate::centurisk_db::DbPool, samples_dir: &std::path::Path) {
-    let conn = db.get().expect("DB connection for onboarding");
-
-    let count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM pools", [], |r| r.get(0))
-        .unwrap_or(0);
-
-    if count > 0 {
-        tracing::info!("Database already has data, skipping sample import");
-        return;
-    }
-
-    if !samples_dir.exists() {
-        tracing::warn!("Samples directory not found at {}, skipping", samples_dir.display());
-        return;
-    }
-
-    tracing::info!("Importing sample data from {}", samples_dir.display());
-
-    // Read each subdirectory as a pool
-    let mut entries: Vec<_> = std::fs::read_dir(samples_dir)
-        .expect("Failed to read samples directory")
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().is_dir())
-        .collect();
-    entries.sort_by_key(|e| e.file_name());
-
-    // We also need to create users — collect pool/member IDs for user creation
-    let mut user_seed_sql = String::new();
-    let system_actor = ActorId::new();
-
-    for entry in &entries {
-        let pool_dir = entry.path();
-        let pool_csv_path = pool_dir.join("pool.csv");
-
-        if !pool_csv_path.exists() {
-            continue;
-        }
-
-        // Read pool.csv to get pool name and members
-        let pool_csv = std::fs::read_to_string(&pool_csv_path).expect("Failed to read pool.csv");
-        let mut rdr = csv::ReaderBuilder::new()
-            .trim(csv::Trim::All)
-            .from_reader(pool_csv.as_bytes());
-
-        let pool_id = PoolId::new();
-        let mut pool_name = String::new();
-        let mut members: Vec<(MemberId, String)> = Vec::new();
-
-        #[derive(Deserialize)]
-        struct PoolRow {
-            pool_name: String,
-            member_name: String,
-            #[allow(dead_code)]
-            member_contact_email: String,
-        }
-
-        for result in rdr.deserialize() {
-            let row: PoolRow = result.expect("Failed to parse pool.csv row");
-            if pool_name.is_empty() {
-                pool_name = row.pool_name.clone();
-            }
-            members.push((MemberId::new(), row.member_name));
-        }
-
-        // Create pool
-        conn.execute(
-            "INSERT INTO pools (pool_id, name, created_by) VALUES (?1, ?2, ?3)",
-            rusqlite::params![pool_id.to_string(), pool_name, system_actor.to_string()],
-        ).expect("Failed to create pool");
-
-        // Create members
-        for (member_id, member_name) in &members {
-            conn.execute(
-                "INSERT INTO members (member_id, pool_id, name, created_by) VALUES (?1, ?2, ?3, ?4)",
-                rusqlite::params![member_id.to_string(), pool_id.to_string(), member_name, system_actor.to_string()],
-            ).expect("Failed to create member");
-        }
-
-        // Import SOV CSVs — match by member name in filename
-        let mut sov_files: Vec<_> = std::fs::read_dir(&pool_dir)
-            .expect("Failed to read pool directory")
-            .filter_map(|e| e.ok())
-            .filter(|e| {
-                let name = e.file_name().to_string_lossy().to_string();
-                name.ends_with("-sov.csv")
-            })
-            .collect();
-        sov_files.sort_by_key(|e| e.file_name());
-
-        let today = time::OffsetDateTime::now_utc().date().to_string();
-
-        for (member_idx, sov_entry) in sov_files.iter().enumerate() {
-            // Use the member at the same index (order matches)
-            let (member_id, _member_name) = if member_idx < members.len() {
-                &members[member_idx]
-            } else {
-                &members[0]
-            };
-
-            let sov_csv = std::fs::read_to_string(sov_entry.path())
-                .expect("Failed to read SOV CSV");
-            let mut rdr = csv::ReaderBuilder::new()
-                .flexible(true)
-                .trim(csv::Trim::All)
-                .from_reader(sov_csv.as_bytes());
-
-            let mut asset_count = 0;
-            for result in rdr.deserialize() {
-                let row: SovRow = match result {
-                    Ok(r) => r,
-                    Err(e) => {
-                        tracing::warn!("Skipping row in {:?}: {e}", sov_entry.file_name());
-                        continue;
-                    }
-                };
-
-                let asset_id = AssetId::new();
-                let path = format!("/{}/{}/{}", pool_id, member_id, asset_id);
-
-                conn.execute(
-                    "INSERT INTO assets (asset_id, pool_id, member_id, path, asset_type, lifecycle, created_by)
-                     VALUES (?1, ?2, ?3, ?4, ?5, 'Active', ?6)",
-                    rusqlite::params![
-                        asset_id.to_string(), pool_id.to_string(), member_id.to_string(),
-                        path, row.asset_type, system_actor.to_string(),
-                    ],
-                ).expect("Failed to insert asset");
-
-                for (field_name, field_value) in row.to_field_mutations() {
-                    let mutation_id = MutationId::new();
-                    let value_json = serde_json::to_string(&field_value).unwrap();
-
-                    conn.execute(
-                        "INSERT INTO field_mutations (mutation_id, asset_id, field_name, value_json, effective_date, submitted_by, approval_state)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'Approved')",
-                        rusqlite::params![
-                            mutation_id.to_string(), asset_id.to_string(),
-                            field_name, value_json, today, system_actor.to_string(),
-                        ],
-                    ).expect("Failed to insert mutation");
-                }
-
-                asset_count += 1;
-            }
-
-            tracing::info!(
-                "Imported {} assets from {:?}",
-                asset_count,
-                sov_entry.file_name()
-            );
-        }
-
-        // Generate user seed SQL for this pool
-        let admin_id = ActorId::new();
-        let pool_admin_id = ActorId::new();
-        let slug = pool_name.to_lowercase().replace(' ', "-");
-
-        user_seed_sql.push_str(&format!(
-            "INSERT INTO users (user_id, email, display_name, category, pool_id, member_id) VALUES ('{admin_id}', 'admin@{slug}.dev', '{pool_name} Admin', 'PoolAdministrator', '{pool_id}', NULL);\n"
-        ));
-
-        for (member_id, member_name) in &members {
-            let user_id = ActorId::new();
-            let email_slug = member_name.to_lowercase().replace(' ', "-").replace("of-", "");
-            user_seed_sql.push_str(&format!(
-                "INSERT INTO users (user_id, email, display_name, category, pool_id, member_id) VALUES ('{user_id}', 'facilities@{email_slug}.gov', '{member_name} User', 'MemberUser', '{pool_id}', '{member_id}');\n"
-            ));
-        }
-
-        let _ = pool_admin_id; // used above
-        tracing::info!("Onboarded pool '{}' with {} members", pool_name, members.len());
-    }
-
-    // Create a CentuRisk system admin
-    let centurisk_admin = ActorId::new();
-    conn.execute(
-        "INSERT INTO users (user_id, email, display_name, category, pool_id, member_id) VALUES (?1, 'admin@centurisk.dev', 'Alice Admin (CentuRisk)', 'CentuRiskAdmin', NULL, NULL)",
-        rusqlite::params![centurisk_admin.to_string()],
-    ).expect("Failed to create CentuRisk admin");
-
-    // Create pool-specific users
-    if !user_seed_sql.is_empty() {
-        conn.execute_batch(&user_seed_sql).expect("Failed to create users");
-    }
-
-    tracing::info!("Sample data import complete");
 }
 
 pub fn routes() -> Router<AppState> {

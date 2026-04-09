@@ -9,9 +9,6 @@ use centurisk_auth::PolicyGate;
 use centurisk_db::DbPool;
 use std::sync::Arc;
 
-// Re-export for use by server binary
-pub use centurisk_db;
-
 #[derive(Clone)]
 pub struct AppState {
     pub db: DbPool,

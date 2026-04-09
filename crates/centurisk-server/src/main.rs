@@ -15,12 +15,6 @@ fn db_path() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from("./data/centurisk.db"))
 }
 
-fn samples_dir() -> PathBuf {
-    std::env::var("CENTURISK_SAMPLES_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("./samples"))
-}
-
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -29,9 +23,6 @@ async fn main() {
 
     let db = centurisk_db::init_db(&db_path()).expect("Failed to initialize database");
     let policy = Arc::new(centurisk_auth::AllowAllPolicy);
-
-    // Import sample CSV data if DB is empty (same path as real onboarding)
-    centurisk_api::onboard::onboard_from_samples(&db, &samples_dir());
 
     let state = centurisk_api::AppState { db, policy };
 
