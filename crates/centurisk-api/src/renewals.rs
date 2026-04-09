@@ -412,9 +412,9 @@ async fn bulk_approve(
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/renewals", get(list_renewals).post(create_renewal))
-        .route("/api/renewals/{id}/proposals", get(get_proposals))
-        .route("/api/renewals/{renewal_id}/proposals/{proposal_id}/decide", post(decide_proposal))
-        .route("/api/renewals/{id}/flags", get(get_flags))
-        .route("/api/renewals/{renewal_id}/flags/{flag_id}/resolve", post(resolve_flag))
-        .route("/api/renewals/{id}/bulk-approve", post(bulk_approve))
+        .route("/api/renewals/:id/proposals", get(get_proposals))
+        .route("/api/renewals/:renewal_id/proposals/:proposal_id/decide", post(decide_proposal))
+        .route("/api/renewals/:id/flags", get(get_flags))
+        .route("/api/renewals/:renewal_id/flags/:flag_id/resolve", post(resolve_flag))
+        .route("/api/renewals/:id/bulk-approve", post(bulk_approve))
 }

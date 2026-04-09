@@ -549,7 +549,7 @@ pub fn display_field_value(fv: &FieldValue) -> String {
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/assets", get(list_assets).post(create_asset))
-        .route("/api/assets/{id}", get(get_asset))
-        .route("/api/assets/{id}/fields", axum::routing::put(edit_fields))
-        .route("/api/assets/{id}/mutations", get(get_mutations))
+        .route("/api/assets/:id", get(get_asset))
+        .route("/api/assets/:id/fields", axum::routing::put(edit_fields))
+        .route("/api/assets/:id/mutations", get(get_mutations))
 }

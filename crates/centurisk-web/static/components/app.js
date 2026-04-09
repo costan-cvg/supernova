@@ -256,8 +256,8 @@ class CenturiskApp extends HTMLElement {
             case "asset-detail": {
                 content.innerHTML = "";
                 const detailEl = document.createElement("centurisk-asset-detail");
-                if (detail && detail.assetId) detailEl.assetId = detail.assetId;
                 content.appendChild(detailEl);
+                if (detail && detail.assetId) detailEl.assetId = detail.assetId;
                 if (titleEl) titleEl.textContent = "Asset Detail";
                 break;
             }

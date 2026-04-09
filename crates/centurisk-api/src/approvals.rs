@@ -186,5 +186,5 @@ async fn act_on_mutation(
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/approvals", get(list_pending))
-        .route("/api/approvals/{mutation_id}", post(act_on_mutation))
+        .route("/api/approvals/:mutation_id", post(act_on_mutation))
 }
