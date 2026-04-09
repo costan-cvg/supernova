@@ -279,20 +279,48 @@ async fn edit_fields(
         now.hour(), now.minute(), now.second()
     );
 
+    // Determine if this user has auto_approve (CentuRisk admins and pool admins do)
+    let auto_approve = matches!(
+        principal.category,
+        centurisk_auth::principal::UserCategory::CentuRiskAdmin
+        | centurisk_auth::principal::UserCategory::PoolAdministrator
+    );
+
+    // Validate proposed values
+    let mut parsed_fields = HashMap::new();
+    for (field_name, raw_value) in &req.fields {
+        parsed_fields.insert(field_name.clone(), parse_field_value(field_name, raw_value));
+    }
+    let validation_errors = centurisk_core::sov::validate_fields(&parsed_fields);
+    if !validation_errors.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse {
+            error: validation_errors.join("; "),
+        })));
+    }
+
     let mut created_mutations = Vec::new();
 
-    for (field_name, raw_value) in &req.fields {
-        let field_value = parse_field_value(field_name, raw_value);
-        let value_json = serde_json::to_string(&field_value).unwrap();
+    for (field_name, field_value) in &parsed_fields {
+        let value_json = serde_json::to_string(field_value).unwrap();
         let mutation_id = MutationId::new();
 
-        // In Inc 1-4: auto-approve all edits. Inc 4+ routes through SOV pipeline.
+        // Route through approval decision
+        let decision = centurisk_core::sov::decide_approval(
+            centurisk_core::sov::ChangeType::Modified,
+            field_name,
+            auto_approve,
+        );
+        let approval_state = match decision {
+            centurisk_core::sov::ApprovalDecision::AutoApprove => "Approved",
+            centurisk_core::sov::ApprovalDecision::Pending => "Pending",
+        };
+
         conn.execute(
             "INSERT INTO field_mutations (mutation_id, asset_id, field_name, value_json, effective_date, submitted_at, submitted_by, approval_state)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'Approved')",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             rusqlite::params![
                 mutation_id.to_string(), asset_id, field_name, value_json,
-                effective_date, submitted_at, principal.actor_id.to_string(),
+                effective_date, submitted_at, principal.actor_id.to_string(), approval_state,
             ],
         ).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: format!("Mutation failed: {e}") })))?;
 
@@ -300,12 +328,12 @@ async fn edit_fields(
         created_mutations.push(MutationResponse {
             mutation_id: mutation_id.to_string(),
             field_name: field_name.clone(),
-            value: display_field_value(&field_value),
+            value: display_field_value(field_value),
             value_raw: raw,
             effective_date: effective_date.clone(),
             submitted_at: submitted_at.clone(),
             submitted_by: principal.actor_id.to_string(),
-            approval_state: "Approved".into(),
+            approval_state: approval_state.into(),
         });
     }
 

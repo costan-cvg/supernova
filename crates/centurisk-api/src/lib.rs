@@ -1,3 +1,4 @@
+pub mod approvals;
 pub mod auth;
 pub mod assets;
 pub mod health;
@@ -23,6 +24,7 @@ pub fn app(state: AppState) -> Router {
         .merge(auth::routes())
         .merge(onboard::routes())
         .merge(quality::routes())
+        .merge(approvals::routes())
         .route("/api/me", get(auth::me))
         .with_state(state)
 }

@@ -2,6 +2,7 @@ import "./nav-sidebar.js";
 import "./asset-list.js";
 import "./asset-form.js";
 import "./asset-detail.js";
+import "./approval-queue.js";
 import "./login-page.js";
 
 const PAGE_TITLES = {
@@ -254,6 +255,10 @@ class CenturiskApp extends HTMLElement {
                 if (titleEl) titleEl.textContent = "Asset Detail";
                 break;
             }
+            case "approvals":
+                content.innerHTML = "";
+                content.appendChild(document.createElement("centurisk-approval-queue"));
+                break;
             default:
                 content.innerHTML = '<div class="placeholder">' + title + ' content will appear here.</div>';
                 break;
