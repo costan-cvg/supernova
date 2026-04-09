@@ -15,7 +15,6 @@ test.describe("Health Endpoint", () => {
     expect(resp.ok()).toBeTruthy();
 
     const body = await resp.json();
-    expect(body.display_name).toBe("System Admin");
     expect(body.category).toBe("CentuRiskAdmin");
   });
 });

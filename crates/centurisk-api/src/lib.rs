@@ -18,6 +18,7 @@ pub fn app(state: AppState) -> Router {
     Router::new()
         .merge(health::routes())
         .merge(assets::routes())
+        .merge(auth::routes())
         .route("/api/me", get(auth::me))
         .with_state(state)
 }

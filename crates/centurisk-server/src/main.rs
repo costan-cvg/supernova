@@ -24,7 +24,6 @@ async fn main() {
     let db = centurisk_db::init_db(&db_path()).expect("Failed to initialize database");
     let policy = Arc::new(centurisk_auth::AllowAllPolicy);
 
-    // Seed a default pool and member for demo purposes
     seed_demo_data(&db);
 
     let state = centurisk_api::AppState { db, policy };
@@ -44,7 +43,6 @@ async fn main() {
 fn seed_demo_data(db: &centurisk_db::DbPool) {
     let conn = db.get().expect("Failed to get DB connection for seeding");
 
-    // Only seed if no pools exist
     let count: i64 = conn
         .query_row("SELECT COUNT(*) FROM pools", [], |r| r.get(0))
         .unwrap_or(0);
@@ -53,15 +51,39 @@ fn seed_demo_data(db: &centurisk_db::DbPool) {
         return;
     }
 
-    let pool_id = "00000000-0000-0000-0000-000000000010";
-    let member_id = "00000000-0000-0000-0000-000000000020";
-    let actor_id = "00000000-0000-0000-0000-000000000001";
+    // Two pools with members and users across all major role categories
+    conn.execute_batch(
+        "-- Pool A: Demo Risk Pool
+         INSERT INTO pools (pool_id, name, created_by)
+           VALUES ('00000000-0000-0000-0000-000000000010', 'Demo Risk Pool', '00000000-0000-0000-0000-000000000001');
+         INSERT INTO members (member_id, pool_id, name, created_by)
+           VALUES ('00000000-0000-0000-0000-000000000020', '00000000-0000-0000-0000-000000000010', 'City of Springfield', '00000000-0000-0000-0000-000000000001');
+         INSERT INTO members (member_id, pool_id, name, created_by)
+           VALUES ('00000000-0000-0000-0000-000000000021', '00000000-0000-0000-0000-000000000010', 'Town of Shelbyville', '00000000-0000-0000-0000-000000000001');
 
-    conn.execute_batch(&format!(
-        "INSERT INTO pools (pool_id, name, created_by) VALUES ('{pool_id}', 'Demo Risk Pool', '{actor_id}');
-         INSERT INTO members (member_id, pool_id, name, created_by) VALUES ('{member_id}', '{pool_id}', 'City of Springfield', '{actor_id}');
-         INSERT INTO users (user_id, email, display_name, category, pool_id) VALUES ('{actor_id}', 'admin@centurisk.dev', 'System Admin', 'CentuRiskAdmin', '{pool_id}');"
-    )).expect("Failed to seed demo data");
+         -- Pool B: Separate pool for cross-tenant isolation testing
+         INSERT INTO pools (pool_id, name, created_by)
+           VALUES ('00000000-0000-0000-0000-000000000011', 'Coastal Counties Pool', '00000000-0000-0000-0000-000000000001');
+         INSERT INTO members (member_id, pool_id, name, created_by)
+           VALUES ('00000000-0000-0000-0000-000000000030', '00000000-0000-0000-0000-000000000011', 'City of Oceanview', '00000000-0000-0000-0000-000000000001');
 
-    tracing::info!("Seeded demo pool, member, and admin user");
+         -- Users: one per major role
+         INSERT INTO users (user_id, email, display_name, category, pool_id, member_id)
+           VALUES ('00000000-0000-0000-0000-000000000001', 'admin@centurisk.dev', 'Alice Admin', 'CentuRiskAdmin', '00000000-0000-0000-0000-000000000010', NULL);
+
+         INSERT INTO users (user_id, email, display_name, category, pool_id, member_id)
+           VALUES ('00000000-0000-0000-0000-000000000002', 'pooladmin@demo.pool', 'Bob Pool-Admin', 'PoolAdministrator', '00000000-0000-0000-0000-000000000010', NULL);
+
+         INSERT INTO users (user_id, email, display_name, category, pool_id, member_id)
+           VALUES ('00000000-0000-0000-0000-000000000003', 'member@springfield.gov', 'Carol Member', 'MemberUser', '00000000-0000-0000-0000-000000000010', '00000000-0000-0000-0000-000000000020');
+
+         INSERT INTO users (user_id, email, display_name, category, pool_id, member_id)
+           VALUES ('00000000-0000-0000-0000-000000000004', 'pooladmin@coastal.pool', 'Dave Coastal-Admin', 'PoolAdministrator', '00000000-0000-0000-0000-000000000011', NULL);
+
+         INSERT INTO users (user_id, email, display_name, category, pool_id, member_id)
+           VALUES ('00000000-0000-0000-0000-000000000005', 'member@oceanview.gov', 'Eve Ocean-Member', 'MemberUser', '00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000030');
+        "
+    ).expect("Failed to seed demo data");
+
+    tracing::info!("Seeded 2 pools, 3 members, 5 users");
 }
