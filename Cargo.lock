@@ -457,6 +457,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "centurisk-perf"
+version = "0.1.0"
+dependencies = [
+ "centurisk-core",
+ "rand 0.8.5",
+ "rusqlite",
+ "rust_decimal",
+ "serde_json",
+ "time",
+ "uuid",
+]
+
+[[package]]
 name = "centurisk-search"
 version = "0.1.0"
 dependencies = [

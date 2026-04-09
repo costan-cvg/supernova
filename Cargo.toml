@@ -12,6 +12,7 @@ members = [
     "crates/centurisk-web",
     "crates/centurisk-server",
     "crates/spike-temporal",
+    "crates/centurisk-perf",
 ]
 
 [workspace.dependencies]
