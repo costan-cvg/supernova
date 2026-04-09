@@ -361,6 +361,12 @@ async fn onboard_pool(
         errors: vec![],
     };
 
+    // Rebuild search index after onboarding new data
+    if let Ok(c) = state.db.get() {
+        let _ = centurisk_search::SearchIndex::ensure_table(&c);
+        let _ = centurisk_search::SearchIndex::rebuild(&c);
+    }
+
     Ok((StatusCode::CREATED, Json(result)))
 }
 

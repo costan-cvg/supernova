@@ -32,7 +32,7 @@ async fn search(
 ) -> Result<Json<SearchResponse>, StatusCode> {
     let conn = state.db.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Ensure FTS table exists and rebuild index (non-fatal if it fails)
+    // Ensure FTS table exists (cheap no-op if already created)
     if let Err(e) = SearchIndex::ensure_table(&conn) {
         tracing::warn!(error = %e, "FTS5 table creation failed — search unavailable");
         return Ok(Json(SearchResponse {
@@ -41,7 +41,14 @@ async fn search(
             total: 0,
         }));
     }
-    let _ = SearchIndex::rebuild(&conn);
+
+    // Only rebuild if the index is empty (first query after startup or after onboarding)
+    let index_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM asset_search", [], |r| r.get(0))
+        .unwrap_or(0);
+    if index_count == 0 {
+        let _ = SearchIndex::rebuild(&conn);
+    }
 
     // Translate natural language to structured query
     let nl_query = translate_query(&params.q);
