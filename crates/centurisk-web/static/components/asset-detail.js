@@ -42,6 +42,18 @@ template.innerHTML = `
     .field-label { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-muted, #718096); margin-bottom: 0.25rem; }
     .field-value { font-size: 0.9375rem; color: var(--color-text, #2d3748); }
     .field-value.money { font-variant-numeric: tabular-nums; font-weight: 600; }
+    .field-value.changed { color: #c53030; }
+    .field-current { font-size: 0.75rem; color: #276749; margin-top: 0.125rem; }
+    .diff-arrow { color: var(--color-text-muted, #718096); font-size: 0.75rem; }
+    .comparison-grid { display: grid; grid-template-columns: 1fr; gap: 0.75rem; }
+    .comparison-row { display: grid; grid-template-columns: 140px 1fr 30px 1fr; gap: 0.5rem; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid #f0f0f0; }
+    .comparison-row.unchanged { opacity: 0.5; }
+    .comparison-label { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-muted, #718096); }
+    .comparison-val { font-size: 0.875rem; }
+    .comparison-val.old { color: var(--color-text-muted, #718096); }
+    .comparison-val.new { color: var(--color-text, #2d3748); font-weight: 500; }
+    .comparison-val.diff { color: #c53030; font-weight: 600; }
+    .comparison-header { display: grid; grid-template-columns: 140px 1fr 30px 1fr; gap: 0.5rem; padding: 0.5rem 0; border-bottom: 2px solid var(--color-border, #e2e8f0); font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-muted, #718096); }
 
     .btn-edit { padding: 0.375rem 0.75rem; background: var(--color-primary, #1a365d); color: #fff; border: none; border-radius: 4px; font-size: 0.8125rem; cursor: pointer; }
     .btn-save { padding: 0.375rem 0.75rem; background: #276749; color: #fff; border: none; border-radius: 4px; font-size: 0.8125rem; cursor: pointer; }
@@ -138,20 +150,35 @@ class CenturiskAssetDetail extends HTMLElement {
 
     async _load() {
         try {
-            let url = "/api/assets/" + this._assetId;
-            if (this._asOfDate) url += "?as_of=" + this._asOfDate;
-
-            const [assetResp, mutResp, qualResp] = await Promise.all([
-                fetch(url),
+            // Always fetch current state
+            const fetches = [
+                fetch("/api/assets/" + this._assetId),
                 fetch("/api/assets/" + this._assetId + "/mutations"),
                 fetch("/api/assets/" + this._assetId + "/quality"),
-            ]);
-            if (!assetResp.ok) throw new Error("Exposure not found");
-            this._asset = await assetResp.json();
-            this._mutations = mutResp.ok ? await mutResp.json() : [];
-            this._quality = qualResp.ok ? await qualResp.json() : null;
+            ];
+            // If as-of date selected, also fetch historical state
+            if (this._asOfDate) {
+                fetches.push(fetch("/api/assets/" + this._assetId + "?as_of=" + this._asOfDate));
+            }
+
+            const responses = await Promise.all(fetches);
+            if (!responses[0].ok) throw new Error("Exposure not found");
+
+            this._currentAsset = await responses[0].json();
+            this._mutations = responses[1].ok ? await responses[1].json() : [];
+            this._quality = responses[2].ok ? await responses[2].json() : null;
+
+            if (this._asOfDate && responses[3] && responses[3].ok) {
+                this._asOfAsset = await responses[3].json();
+                this._asset = this._asOfAsset;
+            } else {
+                this._asOfAsset = null;
+                this._asset = this._currentAsset;
+            }
         } catch (e) {
             this._asset = null;
+            this._currentAsset = null;
+            this._asOfAsset = null;
             this._mutations = [];
         }
         this._renderHeader();
@@ -192,12 +219,19 @@ class CenturiskAssetDetail extends HTMLElement {
 
     _renderFields(content) {
         const a = this._asset;
+
+        // Comparison mode: show as-of vs current side by side
+        if (this._asOfDate && this._asOfAsset && this._currentAsset) {
+            this._renderComparison(content);
+            return;
+        }
+
         const entries = [];
         for (const key of FIELD_ORDER) { if (a.fields[key]) entries.push([key, a.fields[key]]); }
         for (const [key, val] of Object.entries(a.fields)) { if (!FIELD_ORDER.includes(key)) entries.push([key, val]); }
 
         if (entries.length === 0) {
-            content.innerHTML = '<div class="card"><div class="empty">No field data' + (this._asOfDate ? ' at this date' : '') + '.</div></div>';
+            content.innerHTML = '<div class="card"><div class="empty">No field data.</div></div>';
             return;
         }
 
@@ -208,7 +242,7 @@ class CenturiskAssetDetail extends HTMLElement {
 
         const user = JSON.parse(localStorage.getItem("centurisk_user") || "{}");
         const canWrite = !["MemberReadOnly", "PoolReadOnly", "CentuRiskAuditor"].includes(user.category);
-        const editBtn = (this._asOfDate || !canWrite) ? '' : '<button class="btn-edit" id="edit-btn">Edit Fields</button>';
+        const editBtn = canWrite ? '<button class="btn-edit" id="edit-btn">Edit Fields</button>' : '';
         const readOnlyNotice = canWrite ? '' : '<div style="background:#ebf4ff;color:#2b6cb0;padding:0.5rem 1rem;border-radius:4px;font-size:0.8125rem;margin-bottom:1rem;">You have read-only access. Editing is not available.</div>';
         const items = entries.map(([key, val]) => {
             const label = key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
@@ -221,6 +255,50 @@ class CenturiskAssetDetail extends HTMLElement {
 
         const eb = content.querySelector("#edit-btn");
         if (eb) eb.addEventListener("click", () => { this._editing = true; this._renderContent(); });
+    }
+
+    _renderComparison(content) {
+        const asOf = this._asOfAsset.fields;
+        const current = this._currentAsset.fields;
+
+        // Collect all field keys from both states
+        const allKeys = new Set([...Object.keys(current), ...Object.keys(asOf)]);
+        const ordered = [];
+        for (const key of FIELD_ORDER) { if (allKeys.has(key)) { ordered.push(key); allKeys.delete(key); } }
+        for (const key of allKeys) { ordered.push(key); }
+
+        let changedCount = 0;
+        const rows = ordered.map(key => {
+            const label = key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+            const oldVal = asOf[key] || "\u2014";
+            const newVal = current[key] || "\u2014";
+            const changed = oldVal !== newVal;
+            if (changed) changedCount++;
+
+            const rowCls = changed ? "" : " unchanged";
+            const newCls = changed ? " diff" : " new";
+            const arrow = changed ? "\u2192" : "=";
+
+            return '<div class="comparison-row' + rowCls + '">' +
+                '<div class="comparison-label">' + this._esc(label) + '</div>' +
+                '<div class="comparison-val old">' + this._esc(oldVal) + '</div>' +
+                '<div class="diff-arrow" style="text-align:center">' + arrow + '</div>' +
+                '<div class="comparison-val' + newCls + '">' + this._esc(newVal) + '</div>' +
+                '</div>';
+        }).join("");
+
+        const summary = changedCount > 0
+            ? '<div style="margin-bottom:1rem;font-size:0.875rem;color:#c53030;font-weight:500;">' + changedCount + ' field' + (changedCount > 1 ? 's' : '') + ' changed since ' + this._asOfDate + '</div>'
+            : '<div style="margin-bottom:1rem;font-size:0.875rem;color:#276749;">No changes since ' + this._asOfDate + '</div>';
+
+        content.innerHTML = '<div class="card">' + summary +
+            '<div class="comparison-header">' +
+            '<div>Field</div>' +
+            '<div>As of ' + this._esc(this._asOfDate) + '</div>' +
+            '<div></div>' +
+            '<div>Current</div>' +
+            '</div>' +
+            '<div class="comparison-grid">' + rows + '</div></div>';
     }
 
     _renderEditForm(content, entries) {
