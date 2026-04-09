@@ -23,6 +23,7 @@ pub struct MemberRecord {
 }
 
 /// Create a new pool. Requires CentuRisk admin context.
+#[tracing::instrument(skip(db), fields(pool_id = %pool_id, pool_name = %name))]
 pub fn create_pool(
     db: &DbPool,
     pool_id: PoolId,
@@ -38,6 +39,7 @@ pub fn create_pool(
 }
 
 /// Create a new member within a pool.
+#[tracing::instrument(skip(db, _tenant), fields(member_id = %member_id, pool_id = %pool_id))]
 pub fn create_member(
     db: &DbPool,
     _tenant: &TenantContext,

@@ -132,6 +132,7 @@ async fn list_pending(
 }
 
 /// POST /api/approvals/:mutation_id — approve or reject a pending mutation.
+#[tracing::instrument(name = "api.approve_mutation", skip_all, fields(mutation_id = %mutation_id))]
 async fn act_on_mutation(
     Auth(principal): Auth,
     State(state): State<AppState>,

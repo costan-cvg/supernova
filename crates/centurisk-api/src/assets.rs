@@ -97,9 +97,28 @@ fn check_auth(
         &Action(action.into()),
         &Resource { resource_type: resource_type.into(), resource_id: None, pool_id: principal.pool_id, field_name: None },
     );
-    match decision {
-        centurisk_auth::AuthzDecision::Permit => Ok(()),
-        centurisk_auth::AuthzDecision::Deny { .. } => Err(StatusCode::FORBIDDEN),
+    match &decision {
+        centurisk_auth::AuthzDecision::Permit => {
+            tracing::debug!(
+                user_id = %principal.actor_id,
+                category = ?principal.category,
+                action = action,
+                resource_type = resource_type,
+                "cedar.permit"
+            );
+            Ok(())
+        }
+        centurisk_auth::AuthzDecision::Deny { reason } => {
+            tracing::warn!(
+                user_id = %principal.actor_id,
+                category = ?principal.category,
+                action = action,
+                resource_type = resource_type,
+                reason = reason.as_str(),
+                "cedar.deny"
+            );
+            Err(StatusCode::FORBIDDEN)
+        }
     }
 }
 
@@ -114,6 +133,7 @@ fn filter_fields(state: &AppState, principal: &centurisk_auth::Principal, fields
 
 // ── GET /api/assets ─────────────────────────────────────────────────────────
 
+#[tracing::instrument(name = "api.list_assets", skip_all)]
 async fn list_assets(
     Auth(principal): Auth,
     State(state): State<AppState>,
@@ -190,6 +210,7 @@ async fn list_assets(
 
 // ── GET /api/assets/:id ─────────────────────────────────────────────────────
 
+#[tracing::instrument(name = "api.get_asset", skip_all, fields(asset_id = %asset_id))]
 async fn get_asset(
     Auth(principal): Auth,
     State(state): State<AppState>,
@@ -284,6 +305,7 @@ async fn get_asset(
 
 // ── PUT /api/assets/:id/fields ──────────────────────────────────────────────
 
+#[tracing::instrument(name = "api.edit_fields", skip_all, fields(asset_id = %asset_id))]
 async fn edit_fields(
     Auth(principal): Auth,
     State(state): State<AppState>,
@@ -441,6 +463,7 @@ async fn get_mutations(
 
 // ── POST /api/assets ────────────────────────────────────────────────────────
 
+#[tracing::instrument(name = "api.create_asset", skip_all)]
 async fn create_asset(
     Auth(principal): Auth,
     State(state): State<AppState>,

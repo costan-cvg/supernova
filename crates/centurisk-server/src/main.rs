@@ -2,6 +2,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::services::{ServeDir, ServeFile};
+use tower_http::trace::TraceLayer;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
 fn static_dir() -> String {
@@ -15,11 +18,63 @@ fn db_path() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from("./data/centurisk.db"))
 }
 
+fn init_tracing() {
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| "info,tower_http=debug".into());
+
+    let fmt_layer = tracing_subscriber::fmt::layer()
+        .with_target(true)
+        .with_thread_ids(false)
+        .json();
+
+    let honeycomb_key = std::env::var("HONEYCOMB_API_KEY").ok();
+
+    if let Some(api_key) = honeycomb_key {
+        let dataset = std::env::var("HONEYCOMB_DATASET").unwrap_or_else(|_| "riskstar".into());
+
+        // Set OTLP env vars for the exporter (Honeycomb accepts OTLP/gRPC)
+        std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "https://api.honeycomb.io");
+        std::env::set_var("OTEL_EXPORTER_OTLP_HEADERS", format!("x-honeycomb-team={api_key},x-honeycomb-dataset={dataset}"));
+        std::env::set_var("OTEL_SERVICE_NAME", "riskstar");
+
+        let exporter = opentelemetry_otlp::SpanExporter::builder()
+            .with_tonic()
+            .build()
+            .expect("Failed to create OTLP exporter");
+
+        let tracer_provider = opentelemetry_sdk::trace::SdkTracerProvider::builder()
+            .with_batch_exporter(exporter)
+            .with_resource(
+                opentelemetry_sdk::Resource::builder()
+                    .with_service_name("riskstar")
+                    .build(),
+            )
+            .build();
+
+        use opentelemetry::trace::TracerProvider;
+        let tracer = tracer_provider.tracer("riskstar");
+        let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(fmt_layer)
+            .with(otel_layer)
+            .init();
+
+        tracing::info!(honeycomb.dataset = %dataset, "OpenTelemetry exporting to Honeycomb");
+    } else {
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(fmt_layer)
+            .init();
+
+        tracing::info!("No HONEYCOMB_API_KEY set — local structured logging only");
+    }
+}
+
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
-        .init();
+    init_tracing();
 
     let db = centurisk_db::init_db(&db_path()).expect("Failed to initialize database");
     let policy = Arc::new(centurisk_auth::CedarPolicyGate::new());
@@ -31,10 +86,11 @@ async fn main() {
     let index_file = format!("{static_path}/index.html");
 
     let app = centurisk_api::app(state)
+        .layer(TraceLayer::new_for_http())
         .nest_service("/static", ServeDir::new(&static_path))
         .fallback_service(ServeFile::new(&index_file));
 
     let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    tracing::info!("CentuRisk server listening on 0.0.0.0:3000");
+    tracing::info!("RiskStar server listening on 0.0.0.0:3000");
     axum::serve(listener, app).await.unwrap();
 }

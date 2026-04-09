@@ -183,6 +183,7 @@ pub struct MeResponse {
 }
 
 /// POST /api/login — select a user by user_id, get back a JWT.
+#[tracing::instrument(name = "api.login", skip_all)]
 async fn login(
     axum::extract::State(state): axum::extract::State<AppState>,
     Json(req): Json<LoginRequest>,

@@ -155,6 +155,7 @@ impl SovRow {
 // ── Handler ─────────────────────────────────────────────────────────────────
 
 /// POST /api/onboard — onboard a new pool with members and their SOV CSVs.
+#[tracing::instrument(name = "api.onboard_pool", skip_all)]
 async fn onboard_pool(
     State(state): State<AppState>,
     Json(req): Json<OnboardPoolRequest>,
