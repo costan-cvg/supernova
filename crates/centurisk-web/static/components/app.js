@@ -3,6 +3,7 @@ import "./asset-list.js";
 import "./asset-form.js";
 import "./asset-detail.js";
 import "./approval-queue.js";
+import "./dashboard.js";
 import "./login-page.js";
 
 const PAGE_TITLES = {
@@ -210,7 +211,7 @@ class CenturiskApp extends HTMLElement {
             '    </div>' +
             '  </header>' +
             '  <div class="content" id="content">' +
-            '    <div class="placeholder">Select a section from the sidebar to get started.</div>' +
+            '    <centurisk-dashboard></centurisk-dashboard>' +
             '  </div>' +
             '</div>';
 
@@ -239,6 +240,10 @@ class CenturiskApp extends HTMLElement {
         if (!content) return;
 
         switch (id) {
+            case "dashboard":
+                content.innerHTML = "";
+                content.appendChild(document.createElement("centurisk-dashboard"));
+                break;
             case "assets":
                 content.innerHTML = "";
                 content.appendChild(document.createElement("centurisk-asset-list"));

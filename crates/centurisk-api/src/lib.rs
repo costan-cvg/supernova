@@ -1,6 +1,7 @@
 pub mod approvals;
 pub mod auth;
 pub mod assets;
+pub mod dashboard;
 pub mod health;
 pub mod onboard;
 pub mod quality;
@@ -26,6 +27,7 @@ pub fn app(state: AppState) -> Router {
         .merge(onboard::routes())
         .merge(quality::routes())
         .merge(approvals::routes())
+        .merge(dashboard::routes())
         .route("/api/me", get(auth::me))
         .layer(DefaultBodyLimit::max(10 * 1024 * 1024)) // 10MB for CSV imports
         .with_state(state)
