@@ -41,8 +41,9 @@ template.innerHTML = `
     <select id="type-filter">
         <option value="">All Types</option>
         <option value="Building">Building</option>
-        <option value="Contents">Contents</option>
-        <option value="Vehicle">Vehicle</option>
+        <option value="PropertyInTheOpen">Property in the Open</option>
+        <option value="MovableEquipment">Movable Equipment</option>
+        <option value="LicensedVehicle">Licensed Vehicle</option>
         <option value="FineArts">Fine Arts</option>
     </select>
     <select id="lifecycle-filter">

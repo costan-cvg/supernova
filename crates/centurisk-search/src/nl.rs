@@ -139,8 +139,10 @@ pub fn translate_query(input: &str) -> NlQuery {
 fn match_asset_type(token: &str) -> Option<String> {
     match token {
         "building" | "buildings" | "bldg" => Some("Building".into()),
-        "vehicle" | "vehicles" | "truck" | "trucks" => Some("Vehicle".into()),
-        "contents" | "equipment" | "inventory" => Some("Contents".into()),
+        "vehicle" | "vehicles" | "truck" | "trucks" => Some("LicensedVehicle".into()),
+        "equipment" | "mower" | "mowers" | "cart" | "carts" | "drone" | "drones" => Some("MovableEquipment".into()),
+        "pito" | "land" | "infrastructure" | "walkway" | "parking" | "fence" | "fencing" => Some("PropertyInTheOpen".into()),
+        "art" | "arts" | "fine-arts" => Some("FineArts".into()),
         _ => None,
     }
 }
@@ -206,7 +208,7 @@ mod tests {
     #[test]
     fn money_filter_under() {
         let q = translate_query("vehicles under $100k");
-        assert_eq!(q.asset_type, Some("Vehicle".into()));
+        assert_eq!(q.asset_type, Some("LicensedVehicle".into()));
         assert_eq!(q.numeric_filters[0].op, "<");
         assert_eq!(q.numeric_filters[0].value, 100_000.0);
     }

@@ -4,8 +4,8 @@ Building,City Hall,456 Oak Ave,Springfield,IL,62701,1962,Fire Resistive,Office,4
 Building,Public Library — Main Branch,789 Elm St,Springfield,IL,62702,2003,Non-Combustible,Library,22000,2,5200000,true,Pitched,950000
 Building,Water Treatment Plant,1200 River Rd,Springfield,IL,62703,1978,Non-Combustible,Manufacturing,35000,1,8700000,false,Flat,2100000
 Building,Community Center,340 Park Blvd,Springfield,IL,62701,2015,Masonry,Municipal,18000,1,4100000,true,Hip,620000
-Vehicle,Engine 42,123 Main St,Springfield,IL,62701,2019,,Fire Station,,,850000,,,,
-Vehicle,Ladder 7,123 Main St,Springfield,IL,62701,2017,,Fire Station,,,1200000,,,,
-Vehicle,Public Works Truck #12,1200 River Rd,Springfield,IL,62703,2021,,Municipal,,,65000,,,,
-Contents,IT Equipment — City Hall,456 Oak Ave,Springfield,IL,62701,,,Office,,,320000,,,,
-Contents,Library Collection,789 Elm St,Springfield,IL,62702,,,Library,,,1450000,,,,
+LicensedVehicle,Engine 42,123 Main St,Springfield,IL,62701,2019,,Fire Station,,,850000,,,,
+LicensedVehicle,Ladder 7,123 Main St,Springfield,IL,62701,2017,,Fire Station,,,1200000,,,,
+LicensedVehicle,Public Works Truck #12,1200 River Rd,Springfield,IL,62703,2021,,Municipal,,,65000,,,,
+PropertyInTheOpen,IT Equipment — City Hall,456 Oak Ave,Springfield,IL,62701,,,Office,,,320000,,,,
+PropertyInTheOpen,Library Collection,789 Elm St,Springfield,IL,62702,,,Library,,,1450000,,,,

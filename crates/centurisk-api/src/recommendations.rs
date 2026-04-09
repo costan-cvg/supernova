@@ -104,9 +104,10 @@ async fn asset_recommendations(
     // Compute quality score (same logic as quality endpoint)
     let comp_config = match asset_type.as_str() {
         "Building" => quality::building_completeness_config(),
-        "Vehicle" => quality::vehicle_completeness_config(),
-        "Contents" => quality::contents_completeness_config(),
-        _ => quality::building_completeness_config(),
+        "LicensedVehicle" => quality::vehicle_completeness_config(),
+        "PropertyInTheOpen" => quality::pito_completeness_config(),
+        "MovableEquipment" => quality::equipment_completeness_config(),
+        _ => quality::default_completeness_config(),
     };
     let completeness = quality::score_completeness(&fields, &comp_config);
     let accuracy = quality::score_accuracy(&fields, &quality::default_accuracy_rules());

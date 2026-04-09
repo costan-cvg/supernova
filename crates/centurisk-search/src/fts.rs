@@ -183,7 +183,7 @@ mod tests {
              INSERT INTO pools VALUES ('p1', 'Pool A', '', '');
              INSERT INTO members VALUES ('m1', 'p1', 'Member 1', '', '');
              INSERT INTO assets VALUES ('a1', 'p1', 'm1', '/p1/m1/a1', 'Building', 'Active', '', '');
-             INSERT INTO assets VALUES ('a2', 'p1', 'm1', '/p1/m1/a2', 'Vehicle', 'Active', '', '');
+             INSERT INTO assets VALUES ('a2', 'p1', 'm1', '/p1/m1/a2', 'LicensedVehicle', 'Active', '', '');
              INSERT INTO field_mutations VALUES ('fm1', 'a1', 'building_name', '{\"type\":\"Text\",\"value\":\"Fire Station #7\"}', '2024-01-01', '', '', 'Approved');
              INSERT INTO field_mutations VALUES ('fm2', 'a1', 'address', '{\"type\":\"Text\",\"value\":\"123 Main St Springfield\"}', '2024-01-01', '', '', 'Approved');
              INSERT INTO field_mutations VALUES ('fm3', 'a1', 'replacement_cost', '{\"type\":\"Money\",\"value\":{\"amount\":\"1500000\",\"currency\":\"USD\"}}', '2024-01-01', '', '', 'Approved');
@@ -216,7 +216,7 @@ mod tests {
         let conn = setup_test_db();
         let results = SearchIndex::search(&conn, "Engine", None, 10).unwrap();
         assert_eq!(results.len(), 1);
-        assert_eq!(results[0].asset_type, "Vehicle");
+        assert_eq!(results[0].asset_type, "LicensedVehicle");
     }
 
     #[test]

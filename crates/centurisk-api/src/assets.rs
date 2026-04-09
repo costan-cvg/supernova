@@ -2,7 +2,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::routing::get;
 use axum::{Json, Router};
-use centurisk_core::asset::{AssetType, LifecycleState};
+use centurisk_core::asset::LifecycleState;
 use centurisk_core::field_value::FieldValue;
 use centurisk_core::ids::{AssetId, MemberId, MutationId, PoolId};
 use rust_decimal::Decimal;
@@ -469,13 +469,11 @@ async fn create_asset(
     State(state): State<AppState>,
     Json(req): Json<CreateAssetRequest>,
 ) -> Result<(StatusCode, Json<AssetResponse>), (StatusCode, Json<ErrorResponse>)> {
-    let asset_type = match req.asset_type.as_str() {
-        "Building" => AssetType::Building,
-        "Contents" => AssetType::Contents,
-        "Vehicle" => AssetType::Vehicle,
-        "FineArts" => AssetType::FineArts,
-        _ => return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "Invalid asset_type".into() }))),
-    };
+    // Exposure types are extensible — accept any non-empty string.
+    let asset_type_str = req.asset_type.trim().to_string();
+    if asset_type_str.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "asset_type is required".into() })));
+    }
 
     let asset_id = AssetId::new();
     let conn = state.db.get()
@@ -507,7 +505,7 @@ async fn create_asset(
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         rusqlite::params![
             asset_id.to_string(), pool_id.to_string(), member_id.to_string(),
-            path, format!("{:?}", asset_type), format!("{:?}", LifecycleState::Draft),
+            path, &asset_type_str, format!("{:?}", LifecycleState::Draft),
             principal.actor_id.to_string(),
         ],
     ).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: format!("Insert failed: {e}") })))?;
@@ -530,7 +528,7 @@ async fn create_asset(
 
     Ok((StatusCode::CREATED, Json(AssetResponse {
         asset_id: asset_id.to_string(), pool_id: pool_id.to_string(), member_id: member_id.to_string(),
-        asset_type: format!("{:?}", asset_type), lifecycle: "Draft".into(), fields: display_fields,
+        asset_type: asset_type_str, lifecycle: "Draft".into(), fields: display_fields,
     })))
 }
 

@@ -5,7 +5,7 @@ CREATE TABLE assets (
     pool_id TEXT NOT NULL REFERENCES pools(pool_id),
     member_id TEXT NOT NULL REFERENCES members(member_id),
     path TEXT NOT NULL,
-    asset_type TEXT NOT NULL CHECK (asset_type IN ('Building', 'Contents', 'Vehicle', 'FineArts')),
+    asset_type TEXT NOT NULL,
     lifecycle TEXT NOT NULL DEFAULT 'Draft' CHECK (lifecycle IN ('Draft', 'Active', 'PendingChange', 'Archived')),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     created_by TEXT NOT NULL

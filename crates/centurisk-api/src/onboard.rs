@@ -220,13 +220,11 @@ async fn onboard_pool(
                 }
             };
 
-            let asset_type = match row.asset_type.as_str() {
-                "Building" | "Contents" | "Vehicle" | "FineArts" => row.asset_type.as_str(),
-                _ => {
-                    errors.push(format!("Row {}: unknown asset_type '{}'", row_idx + 2, row.asset_type));
-                    continue;
-                }
-            };
+            let asset_type = row.asset_type.trim();
+            if asset_type.is_empty() {
+                errors.push(format!("Row {}: asset_type is empty", row_idx + 2));
+                continue;
+            }
 
             let asset_id = AssetId::new();
             let path = format!("/{}/{}/{}", pool_id, member_id, asset_id);

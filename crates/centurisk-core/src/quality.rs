@@ -248,11 +248,27 @@ pub fn vehicle_completeness_config() -> CompletenessConfig {
     }
 }
 
-/// Default completeness config for contents.
-pub fn contents_completeness_config() -> CompletenessConfig {
+/// Default completeness config for Property in the Open.
+pub fn pito_completeness_config() -> CompletenessConfig {
     CompletenessConfig {
         required: vec!["building_name".into(), "replacement_cost".into()],
-        recommended: vec!["address".into()],
+        recommended: vec!["address".into(), "year_built".into(), "occupancy".into()],
+    }
+}
+
+/// Default completeness config for Movable Equipment.
+pub fn equipment_completeness_config() -> CompletenessConfig {
+    CompletenessConfig {
+        required: vec!["building_name".into(), "replacement_cost".into()],
+        recommended: vec!["year_built".into(), "condition".into()],
+    }
+}
+
+/// Fallback completeness config for pool-defined exposure types.
+pub fn default_completeness_config() -> CompletenessConfig {
+    CompletenessConfig {
+        required: vec!["building_name".into(), "replacement_cost".into()],
+        recommended: vec![],
     }
 }
 

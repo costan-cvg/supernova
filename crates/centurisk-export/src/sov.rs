@@ -227,13 +227,13 @@ mod tests {
 
     #[test]
     fn csv_missing_fields_produce_empty_cells() {
-        let assets = vec![make_row("a1", "Vehicle", vec![
+        let assets = vec![make_row("a1", "LicensedVehicle", vec![
             ("building_name", "Fire Truck #1"),
         ])];
         let csv = export_sov_csv(&assets);
         let mut reader = csv::Reader::from_reader(csv.as_bytes());
         let record = reader.records().next().unwrap().unwrap();
-        assert_eq!(&record[0], "Vehicle"); // asset_type populated
+        assert_eq!(&record[0], "LicensedVehicle"); // asset_type populated
         assert_eq!(&record[1], "Fire Truck #1"); // building_name populated
         assert_eq!(&record[2], ""); // address missing = empty
         assert_eq!(&record[3], ""); // city missing = empty
@@ -258,7 +258,7 @@ mod tests {
     fn csv_multiple_rows() {
         let assets = vec![
             make_complete_row("a1"),
-            make_row("a2", "Contents", vec![("building_name", "Library Contents")]),
+            make_row("a2", "PropertyInTheOpen", vec![("building_name", "Library Contents")]),
         ];
         let csv = export_sov_csv(&assets);
         let mut reader = csv::Reader::from_reader(csv.as_bytes());

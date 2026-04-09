@@ -20,11 +20,39 @@ pub enum LifecycleState {
 
 /// Asset type classification.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// Known exposure types. The system is extensible — pools can define
+/// additional types (K9, Watercraft, etc.) stored as strings in the DB.
+/// Core logic matches on known variants; unknown types get default handling.
 pub enum AssetType {
     Building,
-    Contents,
-    Vehicle,
+    PropertyInTheOpen,
+    MovableEquipment,
+    LicensedVehicle,
     FineArts,
+}
+
+impl AssetType {
+    /// Parse a string into a known AssetType, or None for pool-defined types.
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "Building" => Some(Self::Building),
+            "PropertyInTheOpen" => Some(Self::PropertyInTheOpen),
+            "MovableEquipment" => Some(Self::MovableEquipment),
+            "LicensedVehicle" => Some(Self::LicensedVehicle),
+            "FineArts" => Some(Self::FineArts),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Building => "Building",
+            Self::PropertyInTheOpen => "PropertyInTheOpen",
+            Self::MovableEquipment => "MovableEquipment",
+            Self::LicensedVehicle => "LicensedVehicle",
+            Self::FineArts => "FineArts",
+        }
+    }
 }
 
 /// Approval state for a field mutation.

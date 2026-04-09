@@ -60,9 +60,10 @@ async fn asset_quality(
     // Completeness: merge built-in + custom field definitions
     let mut comp_config = match asset_type.as_str() {
         "Building" => quality::building_completeness_config(),
-        "Vehicle" => quality::vehicle_completeness_config(),
-        "Contents" => quality::contents_completeness_config(),
-        _ => quality::building_completeness_config(),
+        "LicensedVehicle" => quality::vehicle_completeness_config(),
+        "PropertyInTheOpen" => quality::pito_completeness_config(),
+        "MovableEquipment" => quality::equipment_completeness_config(),
+        _ => quality::default_completeness_config(),
     };
 
     // Resolve pool_id for loading custom fields
@@ -175,9 +176,10 @@ async fn quality_summary(
     let mut results: Vec<AssetQualitySummary> = assets.into_iter().map(|(asset_id, (asset_type, fields))| {
         let mut comp_config = match asset_type.as_str() {
             "Building" => quality::building_completeness_config(),
-            "Vehicle" => quality::vehicle_completeness_config(),
-            "Contents" => quality::contents_completeness_config(),
-            _ => quality::building_completeness_config(),
+            "LicensedVehicle" => quality::vehicle_completeness_config(),
+            "PropertyInTheOpen" => quality::pito_completeness_config(),
+            "MovableEquipment" => quality::equipment_completeness_config(),
+            _ => quality::default_completeness_config(),
         };
 
         // Extend with custom field definitions applicable to this asset type

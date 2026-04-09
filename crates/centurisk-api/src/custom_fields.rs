@@ -44,8 +44,9 @@ pub struct CreateCustomFieldRequest {
 fn default_asset_types() -> Vec<String> {
     vec![
         "Building".into(),
-        "Contents".into(),
-        "Vehicle".into(),
+        "PropertyInTheOpen".into(),
+        "MovableEquipment".into(),
+        "LicensedVehicle".into(),
         "FineArts".into(),
     ]
 }
@@ -58,7 +59,8 @@ struct ErrorResponse {
 // ── Validation ─────────────────────────────────────────────────────────────
 
 const VALID_FIELD_TYPES: &[&str] = &["Text", "Number", "Date", "Boolean", "Enum"];
-const VALID_ASSET_TYPES: &[&str] = &["Building", "Contents", "Vehicle", "FineArts"];
+// Exposure types are extensible — no hardcoded validation list.
+// Pools can define additional types (K9, Watercraft, etc.).
 
 fn validate_create_request(req: &CreateCustomFieldRequest) -> Result<(), String> {
     if req.field_name.is_empty() {
@@ -79,12 +81,8 @@ fn validate_create_request(req: &CreateCustomFieldRequest) -> Result<(), String>
         ));
     }
     for at in &req.asset_types {
-        if !VALID_ASSET_TYPES.contains(&at.as_str()) {
-            return Err(format!(
-                "invalid asset_type '{}'; must be one of: {}",
-                at,
-                VALID_ASSET_TYPES.join(", ")
-            ));
+        if at.trim().is_empty() {
+            return Err("asset_type entries must not be empty".into());
         }
     }
     if req.field_type == "Enum" {

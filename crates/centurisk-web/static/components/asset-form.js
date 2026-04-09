@@ -5,8 +5,9 @@
 
 const ASSET_TYPES = [
     { value: "Building", label: "Building" },
-    { value: "Contents", label: "Contents" },
-    { value: "Vehicle", label: "Vehicle" },
+    { value: "PropertyInTheOpen", label: "Property in the Open" },
+    { value: "MovableEquipment", label: "Movable Equipment" },
+    { value: "LicensedVehicle", label: "Licensed Vehicle" },
     { value: "FineArts", label: "Fine Arts" },
 ];
 

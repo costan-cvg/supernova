@@ -24,8 +24,9 @@ const LIFECYCLE_COLORS = {
 
 const ASSET_TYPE_LABELS = {
     Building: "Building",
-    Contents: "Contents",
-    Vehicle: "Vehicle",
+    PropertyInTheOpen: "Property in the Open",
+    MovableEquipment: "Movable Equipment",
+    LicensedVehicle: "Licensed Vehicle",
     FineArts: "Fine Arts",
 };
 
