@@ -1,0 +1,19 @@
+[package]
+name = "spike-temporal"
+version = "0.1.0"
+edition = "2021"
+
+# Spike 1: Temporal resolution benchmark at 1M assets
+
+[[bin]]
+name = "spike-temporal"
+path = "src/main.rs"
+
+[dependencies]
+centurisk-core = { path = "../centurisk-core" }
+rusqlite = { workspace = true }
+uuid = { workspace = true }
+time = { workspace = true }
+rust_decimal = { workspace = true }
+serde_json = { workspace = true }
+rand = "0.8"

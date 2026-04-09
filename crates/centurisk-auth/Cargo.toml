@@ -1,0 +1,16 @@
+[package]
+name = "centurisk-auth"
+version = "0.1.0"
+edition = "2021"
+
+# PolicyGate trait, TenantContext, AllowAllPolicy, Cedar (later)
+
+[dependencies]
+centurisk-core = { path = "../centurisk-core" }
+serde = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

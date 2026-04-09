@@ -1,0 +1,20 @@
+[package]
+name = "centurisk-server"
+version = "0.1.0"
+edition = "2021"
+
+# Binary. Composition root. Wires everything.
+
+[[bin]]
+name = "centurisk"
+path = "src/main.rs"
+
+[dependencies]
+centurisk-core = { path = "../centurisk-core" }
+centurisk-auth = { path = "../centurisk-auth" }
+centurisk-db = { path = "../centurisk-db" }
+centurisk-api = { path = "../centurisk-api" }
+axum = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

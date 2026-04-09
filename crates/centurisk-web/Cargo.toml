@@ -1,0 +1,7 @@
+[package]
+name = "centurisk-web"
+version = "0.1.0"
+edition = "2021"
+
+# Static Vanilla JS Web Components — this crate packages the frontend assets.
+# No Rust library code; build script copies static assets.

@@ -1,0 +1,13 @@
+[package]
+name = "centurisk-notify"
+version = "0.1.0"
+edition = "2021"
+
+# In-app notifications + email digest
+
+[dependencies]
+centurisk-core = { path = "../centurisk-core" }
+serde = { workspace = true }
+uuid = { workspace = true }
+time = { workspace = true }
+thiserror = { workspace = true }

@@ -1,0 +1,49 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/centurisk-core",
+    "crates/centurisk-auth",
+    "crates/centurisk-db",
+    "crates/centurisk-api",
+    "crates/centurisk-search",
+    "crates/centurisk-import",
+    "crates/centurisk-export",
+    "crates/centurisk-notify",
+    "crates/centurisk-web",
+    "crates/centurisk-server",
+    "crates/spike-temporal",
+]
+
+[workspace.dependencies]
+# Domain
+rust_decimal = { version = "1", features = ["serde-with-str"] }
+time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
+uuid = { version = "1", features = ["v7", "serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# HTTP
+axum = "0.7"
+tokio = { version = "1", features = ["full"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["fs", "cors", "trace"] }
+
+# Database
+rusqlite = { version = "0.31", features = ["bundled", "time", "serde_json", "uuid"] }
+r2d2 = "0.8"
+r2d2_sqlite = "0.24"
+refinery = { version = "0.8", features = ["rusqlite"] }
+
+# Auth
+jsonwebtoken = "9"
+
+# Observability
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Testing
+proptest = "1"
+
+# Error handling
+thiserror = "1"
+anyhow = "1"

@@ -1,0 +1,17 @@
+[package]
+name = "centurisk-core"
+version = "0.1.0"
+edition = "2021"
+
+# Pure domain logic. NO I/O, NO async.
+
+[dependencies]
+rust_decimal = { workspace = true }
+time = { workspace = true }
+uuid = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

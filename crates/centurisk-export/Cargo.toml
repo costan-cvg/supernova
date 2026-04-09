@@ -1,0 +1,11 @@
+[package]
+name = "centurisk-export"
+version = "0.1.0"
+edition = "2021"
+
+# SOV generation, CAT export, CoI
+
+[dependencies]
+centurisk-core = { path = "../centurisk-core" }
+serde = { workspace = true }
+thiserror = { workspace = true }

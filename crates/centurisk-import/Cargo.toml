@@ -1,0 +1,11 @@
+[package]
+name = "centurisk-import"
+version = "0.1.0"
+edition = "2021"
+
+# Bulk import pipeline (after Spike 3)
+
+[dependencies]
+centurisk-core = { path = "../centurisk-core" }
+serde = { workspace = true }
+thiserror = { workspace = true }

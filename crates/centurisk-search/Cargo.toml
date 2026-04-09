@@ -1,0 +1,11 @@
+[package]
+name = "centurisk-search"
+version = "0.1.0"
+edition = "2021"
+
+# Search index + NL query layer (after Spike 2)
+
+[dependencies]
+centurisk-core = { path = "../centurisk-core" }
+serde = { workspace = true }
+thiserror = { workspace = true }
