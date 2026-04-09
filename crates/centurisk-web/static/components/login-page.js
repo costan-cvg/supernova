@@ -130,8 +130,8 @@ template.innerHTML = `
 
 <div class="login-card">
     <div class="logo">
-        <div class="logo-icon">CR</div>
-        <span class="logo-text">CentuRisk</span>
+        <div class="logo-icon">RS</div>
+        <span class="logo-text">RiskStar</span>
     </div>
     <p class="subtitle">Select a user to log in as. Phase 1 demo — no password required.</p>
     <label for="user-select">Log in as</label>
@@ -158,10 +158,10 @@ const ROLE_CLASS = {
 };
 
 const ROLE_LABEL = {
-    CentuRiskAdmin: "CentuRisk Admin",
-    CentuRiskAnalyst: "CentuRisk Analyst",
-    CentuRiskAuditor: "CentuRisk Auditor",
-    CentuRiskSupport: "CentuRisk Support",
+    CentuRiskAdmin: "RiskStar Admin",
+    CentuRiskAnalyst: "RiskStar Analyst",
+    CentuRiskAuditor: "RiskStar Auditor",
+    CentuRiskSupport: "RiskStar Support",
     PoolAdministrator: "Pool Administrator",
     PoolAnalyst: "Pool Analyst",
     PoolReadOnly: "Pool Read-Only",

@@ -76,8 +76,8 @@ class CenturiskDashboard extends HTMLElement {
         if (!this._overview || this._overview.total_assets === 0) {
             content.innerHTML =
                 '<div class="empty-state">' +
-                '<p>No assets in your portfolio yet.</p>' +
-                '<button class="btn-primary" id="go-assets">View Assets</button>' +
+                '<p>No exposures in your portfolio yet.</p>' +
+                '<button class="btn-primary" id="go-assets">View Exposures</button>' +
                 '</div>';
             const btn = content.querySelector("#go-assets");
             if (btn) btn.addEventListener("click", () => {
@@ -90,7 +90,7 @@ class CenturiskDashboard extends HTMLElement {
         const fmtMoney = (n) => "$" + Math.round(n).toLocaleString();
 
         let html = '<div class="stats-grid">';
-        html += '<div class="stat-card"><div class="stat-label">Total Assets</div><div class="stat-value">' + o.total_assets + '</div></div>';
+        html += '<div class="stat-card"><div class="stat-label">Total Exposures</div><div class="stat-value">' + o.total_assets + '</div></div>';
         html += '<div class="stat-card"><div class="stat-label">Total Insured Value</div><div class="stat-value money">' + fmtMoney(o.total_tiv) + '</div></div>';
         html += '<div class="stat-card"><div class="stat-label">Pending Approvals</div><div class="stat-value">' + o.pending_approvals + '</div></div>';
         html += '<div class="stat-card"><div class="stat-label">Asset Types</div><div class="type-pills">';

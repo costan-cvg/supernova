@@ -144,7 +144,7 @@ class CenturiskAssetDetail extends HTMLElement {
                 fetch("/api/assets/" + this._assetId + "/mutations"),
                 fetch("/api/assets/" + this._assetId + "/quality"),
             ]);
-            if (!assetResp.ok) throw new Error("Asset not found");
+            if (!assetResp.ok) throw new Error("Exposure not found");
             this._asset = await assetResp.json();
             this._mutations = mutResp.ok ? await mutResp.json() : [];
             this._quality = qualResp.ok ? await qualResp.json() : null;
@@ -159,7 +159,7 @@ class CenturiskAssetDetail extends HTMLElement {
 
     _renderHeader() {
         const title = this.shadowRoot.getElementById("title");
-        if (!this._asset) { title.textContent = "Asset not found"; return; }
+        if (!this._asset) { title.textContent = "Exposure not found"; return; }
         const a = this._asset;
         const name = a.fields.building_name || a.asset_type + " " + a.asset_id.substring(0, 8);
         const typeCls = "badge-" + a.asset_type.toLowerCase().replace(/\s/g, "");
@@ -182,7 +182,7 @@ class CenturiskAssetDetail extends HTMLElement {
 
     _renderContent() {
         const content = this.shadowRoot.getElementById("content");
-        if (!this._asset) { content.innerHTML = '<div class="empty">Asset not found.</div>'; return; }
+        if (!this._asset) { content.innerHTML = '<div class="empty">Exposure not found.</div>'; return; }
         if (this._activeTab === "fields") this._renderFields(content);
         else if (this._activeTab === "quality") this._renderQuality(content);
         else this._renderHistory(content);

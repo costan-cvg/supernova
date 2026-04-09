@@ -22,7 +22,7 @@ test.describe("Asset CRUD", () => {
         await loginViaStorage(page, request);
 
         const app = page.locator("centurisk-app");
-        await app.locator("centurisk-nav").locator("button", { hasText: "Assets" }).click();
+        await app.locator("centurisk-nav").locator("button", { hasText: "Exposures" }).click();
 
         const table = app.locator("centurisk-asset-list table");
         await expect(table).toBeAttached({ timeout: 5000 });
@@ -37,7 +37,7 @@ test.describe("Asset CRUD", () => {
         await loginViaStorage(page, request);
 
         const app = page.locator("centurisk-app");
-        await app.locator("centurisk-nav").locator("button", { hasText: "Assets" }).click();
+        await app.locator("centurisk-nav").locator("button", { hasText: "Exposures" }).click();
 
         const addBtn = app.locator("button", { hasText: /Add/ }).first();
         await addBtn.click();
@@ -52,7 +52,7 @@ test.describe("Asset CRUD", () => {
 
         await form.locator('button[type="submit"]').click();
 
-        await expect(app.locator(".page-title")).toHaveText("Assets");
+        await expect(app.locator(".page-title")).toHaveText("Exposures");
         const table = app.locator("centurisk-asset-list table");
         await expect(table).toContainText("New Test Building");
     });

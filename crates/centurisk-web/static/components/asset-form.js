@@ -137,18 +137,18 @@ template.innerHTML = `
 
 <div class="form-header">
     <button class="back-btn" id="back-btn">&larr; Back</button>
-    <h2>Add Asset</h2>
+    <h2>Add Exposure</h2>
 </div>
 <div class="form-card">
     <form id="asset-form">
         <div class="form-group">
-            <label>Asset Type <span class="required">*</span></label>
+            <label>Exposure Type <span class="required">*</span></label>
             <select id="asset-type" required></select>
         </div>
         <div id="fields-container"></div>
         <div class="error" id="error" style="display:none;"></div>
         <div class="form-actions">
-            <button type="submit" class="btn-primary">Create Asset</button>
+            <button type="submit" class="btn-primary">Create Exposure</button>
             <button type="button" class="btn-secondary" id="cancel-btn">Cancel</button>
         </div>
     </form>

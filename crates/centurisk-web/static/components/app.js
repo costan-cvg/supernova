@@ -9,11 +9,11 @@ import "./login-page.js";
 
 const PAGE_TITLES = {
     dashboard: "Dashboard",
-    assets: "Assets",
+    assets: "Exposures",
     quality: "Quality",
     approvals: "Approvals",
     reports: "Reports",
-    "asset-create": "Add Asset",
+    "asset-create": "Add Exposure",
 };
 
 const template = document.createElement("template");
@@ -258,7 +258,7 @@ class CenturiskApp extends HTMLElement {
                 const detailEl = document.createElement("centurisk-asset-detail");
                 content.appendChild(detailEl);
                 if (detail && detail.assetId) detailEl.assetId = detail.assetId;
-                if (titleEl) titleEl.textContent = "Asset Detail";
+                if (titleEl) titleEl.textContent = "Exposure Detail";
                 break;
             }
             case "approvals":

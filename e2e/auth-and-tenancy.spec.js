@@ -161,7 +161,7 @@ test.describe("Login UI Flow", () => {
         await expect(app.locator("centurisk-nav")).toBeAttached({ timeout: 5000 });
 
         // Navigate to assets and see imported data
-        await app.locator("centurisk-nav").locator("button", { hasText: "Assets" }).click();
+        await app.locator("centurisk-nav").locator("button", { hasText: "Exposures" }).click();
         const table = app.locator("centurisk-asset-list table");
         await expect(table).toBeAttached({ timeout: 5000 });
 

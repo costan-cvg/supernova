@@ -15,7 +15,7 @@ if ! curl -sf "$BASE_URL/health" > /dev/null 2>&1; then
     exit 1
 fi
 
-echo "=== CentuRisk Pool Onboarding ==="
+echo "=== RiskStar Pool Onboarding ==="
 echo "Server: $BASE_URL"
 echo ""
 

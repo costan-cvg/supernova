@@ -1,6 +1,6 @@
 const NAV_ITEMS = [
     { id: "dashboard", label: "Dashboard", icon: "\u25A6" },
-    { id: "assets", label: "Assets", icon: "\u2302" },
+    { id: "assets", label: "Exposures", icon: "\u2302" },
     { id: "quality", label: "Quality", icon: "\u2261" },
     { id: "approvals", label: "Approvals", icon: "\u2713" },
     { id: "reports", label: "Reports", icon: "\u2637" },
@@ -86,8 +86,8 @@ template.innerHTML = `
 </style>
 
 <div class="logo">
-    <div class="logo-icon">CR</div>
-    <span class="logo-text">CentuRisk</span>
+    <div class="logo-icon">RS</div>
+    <span class="logo-text">RiskStar</span>
 </div>
 <nav></nav>
 `;

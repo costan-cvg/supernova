@@ -33,8 +33,8 @@ template.innerHTML = `
     .filters select { min-width: 130px; }
 </style>
 <div class="toolbar">
-    <h2>Assets</h2>
-    <button class="btn-primary" id="add-btn">+ Add Asset</button>
+    <h2>Exposures</h2>
+    <button class="btn-primary" id="add-btn">+ Add Exposure</button>
 </div>
 <div class="filters" id="filters">
     <input type="text" id="search" placeholder="Search assets..." />
@@ -109,8 +109,8 @@ class CenturiskAssetList extends HTMLElement {
         if (this._assets.length === 0) {
             content.innerHTML =
                 '<div class="empty-state">' +
-                '<p>No assets yet.</p>' +
-                '<button class="btn-primary" id="empty-add-btn">+ Add your first asset</button>' +
+                '<p>No exposures yet.</p>' +
+                '<button class="btn-primary" id="empty-add-btn">+ Add your first exposure</button>' +
                 '</div>';
             const btn = content.querySelector("#empty-add-btn");
             if (btn) {
