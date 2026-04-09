@@ -1,4 +1,6 @@
 import "./nav-sidebar.js";
+import "./asset-list.js";
+import "./asset-form.js";
 
 const PAGE_TITLES = {
     dashboard: "Dashboard",
@@ -6,6 +8,7 @@ const PAGE_TITLES = {
     quality: "Quality",
     approvals: "Approvals",
     reports: "Reports",
+    "asset-create": "Add Asset",
 };
 
 const template = document.createElement("template");
@@ -45,10 +48,21 @@ template.innerHTML = `
         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
     }
 
+    .header-left {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
     .page-title {
         font-size: 1.125rem;
         font-weight: 600;
         color: var(--color-text, #2d3748);
+    }
+
+    .user-info {
+        font-size: 0.8125rem;
+        color: var(--color-text-muted, #718096);
     }
 
     .content {
@@ -68,11 +82,7 @@ template.innerHTML = `
         font-size: 0.9rem;
     }
 
-    /* Mobile: collapsible sidebar */
-    .overlay {
-        display: none;
-    }
-
+    .overlay { display: none; }
     .menu-btn {
         display: none;
         background: none;
@@ -88,30 +98,11 @@ template.innerHTML = `
             transform: translateX(-100%);
             transition: transform 0.2s ease;
         }
-
-        .sidebar.open {
-            transform: translateX(0);
-        }
-
-        .overlay {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.4);
-            z-index: 90;
-        }
-
-        .overlay.open {
-            display: block;
-        }
-
-        .main {
-            margin-left: 0;
-        }
-
-        .menu-btn {
-            display: block;
-        }
+        .sidebar.open { transform: translateX(0); }
+        .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 90; }
+        .overlay.open { display: block; }
+        .main { margin-left: 0; }
+        .menu-btn { display: block; }
     }
 </style>
 
@@ -121,11 +112,13 @@ template.innerHTML = `
 </div>
 <div class="main">
     <header class="header">
-        <button class="menu-btn" aria-label="Open menu">\u2630</button>
-        <h1 class="page-title">Dashboard</h1>
-        <div></div>
+        <div class="header-left">
+            <button class="menu-btn" aria-label="Open menu">\u2630</button>
+            <h1 class="page-title">Dashboard</h1>
+        </div>
+        <span class="user-info" id="user-info"></span>
     </header>
-    <div class="content">
+    <div class="content" id="content">
         <div class="placeholder">Select a section from the sidebar to get started.</div>
     </div>
 </div>
@@ -136,6 +129,7 @@ class CenturiskApp extends HTMLElement {
         super();
         this.attachShadow({ mode: "open" });
         this.shadowRoot.appendChild(template.content.cloneNode(true));
+        this._currentPage = "dashboard";
     }
 
     connectedCallback() {
@@ -144,18 +138,47 @@ class CenturiskApp extends HTMLElement {
             this._closeMobileMenu();
         });
 
-        const menuBtn = this.shadowRoot.querySelector(".menu-btn");
-        menuBtn.addEventListener("click", () => this._toggleMobileMenu());
+        this.shadowRoot.addEventListener("navigate", (e) => {
+            this._setPage(e.detail.page, e.detail);
+        });
 
-        const overlay = this.shadowRoot.querySelector(".overlay");
-        overlay.addEventListener("click", () => this._closeMobileMenu());
+        this.shadowRoot.querySelector(".menu-btn").addEventListener("click", () => this._toggleMobileMenu());
+        this.shadowRoot.querySelector(".overlay").addEventListener("click", () => this._closeMobileMenu());
+
+        this._loadUser();
     }
 
-    _setPage(id) {
+    async _loadUser() {
+        try {
+            const resp = await fetch("/api/me");
+            if (resp.ok) {
+                const user = await resp.json();
+                this.shadowRoot.getElementById("user-info").textContent =
+                    `Logged in as: ${user.display_name}`;
+            }
+        } catch (_) {}
+    }
+
+    _setPage(id, detail) {
+        this._currentPage = id;
         const title = PAGE_TITLES[id] || id;
         this.shadowRoot.querySelector(".page-title").textContent = title;
-        this.shadowRoot.querySelector(".placeholder").textContent =
-            `${title} content will appear here.`;
+
+        const content = this.shadowRoot.getElementById("content");
+
+        switch (id) {
+            case "assets":
+                content.innerHTML = "";
+                content.appendChild(document.createElement("centurisk-asset-list"));
+                break;
+            case "asset-create":
+                content.innerHTML = "";
+                content.appendChild(document.createElement("centurisk-asset-form"));
+                break;
+            default:
+                content.innerHTML = `<div class="placeholder">${title} content will appear here.</div>`;
+                break;
+        }
     }
 
     _toggleMobileMenu() {

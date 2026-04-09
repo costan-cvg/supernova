@@ -34,6 +34,7 @@ mod tests {
     fn test_state() -> AppState {
         AppState {
             db: centurisk_db::init_test_db().unwrap(),
+            policy: std::sync::Arc::new(centurisk_auth::AllowAllPolicy),
         }
     }
 
