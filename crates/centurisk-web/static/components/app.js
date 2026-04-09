@@ -4,6 +4,7 @@ import "./asset-form.js";
 import "./asset-detail.js";
 import "./approval-queue.js";
 import "./dashboard.js";
+import "./renewal-page.js";
 import "./login-page.js";
 
 const PAGE_TITLES = {
@@ -263,6 +264,11 @@ class CenturiskApp extends HTMLElement {
             case "approvals":
                 content.innerHTML = "";
                 content.appendChild(document.createElement("centurisk-approval-queue"));
+                break;
+            case "reports":
+                content.innerHTML = "";
+                content.appendChild(document.createElement("centurisk-renewal-page"));
+                if (titleEl) titleEl.textContent = "Renewals";
                 break;
             default:
                 content.innerHTML = '<div class="placeholder">' + title + ' content will appear here.</div>';

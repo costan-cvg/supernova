@@ -5,6 +5,7 @@ pub mod dashboard;
 pub mod health;
 pub mod onboard;
 pub mod quality;
+pub mod renewals;
 
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
@@ -28,6 +29,7 @@ pub fn app(state: AppState) -> Router {
         .merge(quality::routes())
         .merge(approvals::routes())
         .merge(dashboard::routes())
+        .merge(renewals::routes())
         .route("/api/me", get(auth::me))
         .layer(DefaultBodyLimit::max(10 * 1024 * 1024)) // 10MB for CSV imports
         .with_state(state)
