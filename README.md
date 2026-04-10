@@ -11,12 +11,16 @@ Risk Management Information System for public sector risk pools. Manages exposur
 ## Quick Start
 
 ```bash
-# Clone and build
+# Clone and set up
 git clone <repo-url>
 cd supernova
-cargo build -p centurisk-server
+./scripts/setup-project.sh
+```
 
-# Start the server (empty database)
+The setup script checks prerequisites, builds the workspace, runs all tests (136 Rust + 17 Playwright E2E), installs Playwright browsers, and creates the data directory. Once it completes:
+
+```bash
+# Start the server
 cargo run -p centurisk-server
 
 # In another terminal — onboard sample pool data via the API
