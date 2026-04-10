@@ -18,6 +18,14 @@ The core stores field-level mutations with per-field effective dates. A building
 
 Asset state resolves along two axes: temporal (as of what effective date?) and approval state (approved values only, or approved-plus-pending?). This produces four view modes. Current state shows approved values at the present date — the default view. Historical queries show approved values at a specific past or future date. Provisional modes show approved-plus-pending at current date or at a specific date. Exports always use approved values. The quality model can evaluate any combination.
 
+## Asset-Level Locking and Concurrency Control
+
+When any property of an asset enters pending state, the entire asset is locked from further changes until that pending change is approved or rejected. This is an optimistic locking model — the lock is acquired at save time, not when the record is opened for editing. Users can open and prepare edits freely; the constraint is enforced on submission.
+
+The locking model handles three concurrency scenarios. In the single-user flow, a user submits a change, the asset locks, and a pending-approval indicator appears everywhere the asset is displayed. No edit controls are available until the change is resolved. In the concurrent-edit flow, two users have the same asset open for editing — the first to save locks the asset, and the second user's save attempt is blocked with a notification that pending changes exist. In the approval-authority flow, a user with approval authority opens an asset that already has pending changes — the system notifies them that pending approvals must be resolved before they can submit their own changes.
+
+The locked state is visible everywhere the asset appears: exposure list, search results, reports, member portal. The interface shows that changes are pending and the asset is locked for submissions. This is a display concern at the adapter layer — the core tracks the lock state as part of the asset's lifecycle, and every rendering adapter checks it.
+
 ## Custom Fields and Asset Types
 
 CentuRisk admins define custom fields during onboarding. Pool administrators can modify them afterward. All changes carry an auditable history. Asset types follow a composition model — buildings, contents, vehicles, and fine arts share common attributes with type-specific extensions. New asset types are data-driven extensions, not schema changes. Lifecycle states (Draft, Active, Pending Change, Archived) interact with the temporal model and approval routing.

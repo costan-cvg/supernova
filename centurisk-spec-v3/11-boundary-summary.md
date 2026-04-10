@@ -5,7 +5,7 @@
 | Onboarding Adapter → Exposure Core | Validated asset data conforming to SOV schema | Adapter transforms and validates; core stores |
 | Bulk Import Pipeline → Exposure Core | Same SOV schema, batch-processed with step function stages | Pipeline processes in resumable stages; core stores |
 | Appraisal Intake → Exposure Core | Structured appraisal result mapped to target asset (`AppraisalIntakeV1`) | Adapter validates; core updates valuation and quality |
-| SOV Pipeline → SOV Approval Workflow | `SOVProcessingResult { validated_assets[], diff_summary, quality_assessment, errors[], source }` | Pipeline produces; workflow consumes and routes |
+| SOV Pipeline → Lock Check → SOV Approval Workflow | `SOVProcessingResult { validated_assets[], diff_summary, quality_assessment, errors[], source }` | Pipeline produces; lock check gates; workflow consumes and routes |
 | Renewal Adapter → SOV Pipeline | Pre-populated SOV with proposed values and quality flags | Renewal orchestrates; pipeline validates and diffs |
 | Exposure Core → Member/Pool Adapters | Exposure views, quality scores, recommendations | Core produces; adapters render with scope |
 | Exposure Core → CAT/SOV Export Adapters | Asset data filtered by scope, validated for completeness | Core provides; adapter maps to target format |

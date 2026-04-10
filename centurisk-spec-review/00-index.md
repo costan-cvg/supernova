@@ -26,3 +26,4 @@ The review process works section by section: identify hidden assumptions in the 
 - [10 — Access Control — ABAC with Cedar Policy](10-access-control.md)
 - [11 — Items Missing from Document](11-missing-items.md)
 - [12 — Next Steps](12-next-steps.md)
+- [13 — Exposure Module Spec (v0.7) Contradiction Resolution](13-exposure-module-contradictions.md)
