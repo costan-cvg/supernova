@@ -718,7 +718,7 @@ mod tests {
 
         // Get quality score WITHOUT custom fields
         let qual_req = Request::builder()
-            .uri(format!("/api/assets/{}/quality", asset_id))
+            .uri(format!("/api/quality/asset/{}", asset_id))
             .header("Authorization", format!("Bearer {}", token))
             .body(Body::empty())
             .unwrap();
@@ -753,7 +753,7 @@ mod tests {
 
         // Get quality score WITH the new required custom field
         let qual_req2 = Request::builder()
-            .uri(format!("/api/assets/{}/quality", asset_id))
+            .uri(format!("/api/quality/asset/{}", asset_id))
             .header("Authorization", format!("Bearer {}", token))
             .body(Body::empty())
             .unwrap();
